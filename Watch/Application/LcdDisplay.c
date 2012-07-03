@@ -82,6 +82,7 @@ static void ToggleSecondsHandler(unsigned char MsgOptions);
 static void ConnectionStateChangeHandler(void);
 
 /******************************************************************************/
+static void DrawFullTime(int Hour, int Minute, int Second, unsigned int y);
 static void DrawDateTime(unsigned char OnceConnected);
 static void DrawConnectionScreen(void);
 static void InitMyBuffer(void);
@@ -862,7 +863,8 @@ static void BarCodeHandler(tMessage* pMsg)
 
   FillMyBuffer(STARTING_ROW,NUM_LCD_ROWS,0x00);
 
-  CopyRowsIntoMyBuffer(pBarCodeImage,STARTING_ROW,NUM_LCD_ROWS);
+  DrawFullTime(18-RTCHOUR, 50-RTCMIN, 60-RTCSEC, 32);
+  //CopyRowsIntoMyBuffer(pBarCodeImage,STARTING_ROW,NUM_LCD_ROWS);
 
   /* display entire buffer */
   SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
@@ -1150,6 +1152,60 @@ static void CopyColumnsIntoMyBuffer(unsigned char const* pImage,
     DestRow++;
     RowCounter++;
   }
+
+}
+
+static void DrawFullTime(int Hour, int Minutes, int Seconds, unsigned int y)
+{
+  unsigned char msd;
+  unsigned char lsd;
+
+  /* display hour */
+  //int Hour = RTCHOUR;
+
+  /* if required convert to twelve hour format */
+  if ( GetTimeFormat() == TWELVE_HOUR )
+  {
+    Hour %= 12;
+    if (Hour == 0) Hour = 12;
+  }
+
+  msd = Hour / 10;
+  lsd = Hour % 10;
+
+  gRow = 6 + y;
+  gColumn = 0;
+  gBitColumnMask = BIT4;
+  SetFont(MetaWatchTime);
+
+  /* if first digit is zero then leave location blank */
+  if ( msd == 0 && GetTimeFormat() == TWELVE_HOUR )
+  {
+    WriteFontCharacter(TIME_CHARACTER_SPACE_INDEX);
+  }
+  else
+  {
+    WriteFontCharacter(msd);
+  }
+
+  WriteFontCharacter(lsd);
+
+  WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
+
+  /* display minutes */
+  //int Minutes = RTCMIN;
+  msd = Minutes / 10;
+  lsd = Minutes % 10;
+  WriteFontCharacter(msd);
+  WriteFontCharacter(lsd);
+
+  //int Seconds = RTCSEC;
+  msd = Seconds / 10;
+  lsd = Seconds % 10;
+
+  WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
+  WriteFontCharacter(msd);
+  WriteFontCharacter(lsd);
 
 }
 
