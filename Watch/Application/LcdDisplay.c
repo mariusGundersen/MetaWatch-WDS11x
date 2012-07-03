@@ -890,6 +890,10 @@ static void BarCodeHandler(tMessage* pMsg)
 	switch (pMsg->Options) {
 	  case COUNTDOWN_START:
 		running = 0;
+		toMin = RTCMIN + diff;
+		toHour = RTCHOUR + toMin / 60;
+		toMin = toMin % 60;
+		toSec = RTCSEC;
 		break;
 	  case COUNTDOWN_DOWN:
 		toSec = RTCSEC;
@@ -2632,6 +2636,14 @@ unsigned char LcdRtcUpdateHandlerIsr(void)
       SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
       ExitLpm = 1;
     }
+  }
+
+  if( running ){
+	tMessage Msg;
+	SetupMessage(&Msg, CountDown, COUNTDOWN_TICK);
+	SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
+	ExitLpm = 1;
+
   }
 
   return ExitLpm;

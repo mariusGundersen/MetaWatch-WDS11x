@@ -483,6 +483,7 @@ typedef struct
 #define COUNTDOWN_START ( 2 )
 #define COUNTDOWN_DOWN ( 3 )
 #define COUNTDOWN_UP ( 4 )
+#define COUNTDOWN_TICK ( 5 )
 
 /* configure mode option */
 #define SAVE_MODE_CONFIGURATION_MASK ( BIT4 )
