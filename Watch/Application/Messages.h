@@ -267,7 +267,7 @@ typedef enum
   ModeTimeoutMsg = 0xa7,
   WatchStatusMsg = 0xa8,
   MenuModeMsg = 0xa9,
-  BarCode = 0xaa,
+  CountDown = 0xaa,
   ListPairedDevicesMsg = 0xab,
   ConnectionStateChangeMsg = 0xac,
   ModifyTimeMsg = 0xad,
@@ -480,6 +480,9 @@ typedef struct
 
 /* button option */
 #define RESET_DISPLAY_TIMER ( 1 )
+#define COUNTDOWN_START ( 2 )
+#define COUNTDOWN_DOWN ( 3 )
+#define COUNTDOWN_UP ( 4 )
 
 /* configure mode option */
 #define SAVE_MODE_CONFIGURATION_MASK ( BIT4 )

@@ -160,7 +160,7 @@ typedef enum
   Menu3Page,
   ListPairedDevicesPage,
   WatchStatusPage,
-  QrCodePage
+  CountDownPage
 
 } etIdlePageMode;
 
@@ -330,7 +330,7 @@ static void DisplayQueueMessageHandler(tMessage* pMsg)
     WatchStatusScreenHandler();
     break;
 
-  case BarCode:
+  case CountDown:
     BarCodeHandler(pMsg);
     break;
 
@@ -533,7 +533,7 @@ static void ConnectionStateChangeHandler(void)
       WatchStatusScreenHandler();
       break;
 
-    case QrCodePage:
+    case CountDownPage:
       break;
 
     default:
@@ -857,19 +857,72 @@ static void DrawVersionInfo(unsigned char RowHeight)
 /* the bar code should remain displayed until the button is pressed again
  * or another mode is started
  */
+
+static unsigned int toHour,
+					toMin,
+					toSec,
+					running = 0,
+					diff = 10;
+
 static void BarCodeHandler(tMessage* pMsg)
 {
   StopDisplayTimer();
 
   FillMyBuffer(STARTING_ROW,NUM_LCD_ROWS,0x00);
 
-  DrawFullTime(18-RTCHOUR, 50-RTCMIN, 60-RTCSEC, 32);
+  if(!running){
+	  switch (pMsg->Options) {
+	    case COUNTDOWN_START:
+	      running = 1;
+	      break;
+		case COUNTDOWN_DOWN:
+		  diff--;
+		  break;
+		case COUNTDOWN_UP:
+		  diff++;
+		  break;
+	  }
+	  toMin = RTCMIN + diff;
+	  toHour = RTCHOUR + toMin / 60;
+	  toMin = toMin % 60;
+	  toSec = RTCSEC;
+  }else{
+	switch (pMsg->Options) {
+	  case COUNTDOWN_START:
+		running = 0;
+		break;
+	  case COUNTDOWN_DOWN:
+		toSec = RTCSEC;
+		toMin--;
+		break;
+	  case COUNTDOWN_UP:
+		toSec = RTCSEC;
+		break;
+	}
+  }
+  int secs, mins, hour;
+  secs = toSec - RTCSEC;
+  mins = toMin - RTCMIN;
+  hour = toHour - RTCHOUR;
+  if(secs < 0){
+	  mins--;
+	  secs = 60 + secs;
+  }
+  if(mins < 0){
+	  hour--;
+	  mins = 60 + mins;
+  }
+  if(hour == 0 && mins == 0 && secs == 0){
+	  running = 0;
+  }
+
+  DrawFullTime(hour, mins, secs, 32);
   //CopyRowsIntoMyBuffer(pBarCodeImage,STARTING_ROW,NUM_LCD_ROWS);
 
   /* display entire buffer */
   SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
 
-  CurrentIdlePage = QrCodePage;
+  CurrentIdlePage = CountDownPage;
   ConfigureIdleUserInterfaceButtons();
 
 }
@@ -1163,12 +1216,6 @@ static void DrawFullTime(int Hour, int Minutes, int Seconds, unsigned int y)
   /* display hour */
   //int Hour = RTCHOUR;
 
-  /* if required convert to twelve hour format */
-  if ( GetTimeFormat() == TWELVE_HOUR )
-  {
-    Hour %= 12;
-    if (Hour == 0) Hour = 12;
-  }
 
   msd = Hour / 10;
   lsd = Hour % 10;
@@ -2070,7 +2117,7 @@ static void SetupNormalIdleScreenButtons(void)
   EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE,
                      SW_A_INDEX,
                      BUTTON_STATE_IMMEDIATE,
-                     BarCode,
+                     CountDown,
                      RESET_DISPLAY_TIMER);
 }
 
@@ -2122,7 +2169,7 @@ static void ConfigureIdleUserInterfaceButtons(void)
       EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                          SW_A_INDEX,
                          BUTTON_STATE_IMMEDIATE,
-                         BarCode,
+                         CountDown,
                          RESET_DISPLAY_TIMER);
 
       break;
@@ -2312,7 +2359,7 @@ static void ConfigureIdleUserInterfaceButtons(void)
       EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                          SW_A_INDEX,
                          BUTTON_STATE_IMMEDIATE,
-                         BarCode,
+                         CountDown,
                          RESET_DISPLAY_TIMER);
       break;
 
@@ -2346,31 +2393,31 @@ static void ConfigureIdleUserInterfaceButtons(void)
       EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                          SW_A_INDEX,
                          BUTTON_STATE_IMMEDIATE,
-                         BarCode,
+                         CountDown,
                          RESET_DISPLAY_TIMER);
       break;
 
-    case QrCodePage:
+    case CountDownPage:
 
       EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                          SW_F_INDEX,
                          BUTTON_STATE_IMMEDIATE,
-                         WatchStatusMsg,
-                         RESET_DISPLAY_TIMER);
+                         CountDown,
+                         COUNTDOWN_UP);
 
       EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                          SW_E_INDEX,
                          BUTTON_STATE_IMMEDIATE,
-                         ListPairedDevicesMsg,
-                         NO_MSG_OPTIONS);
+                         CountDown,
+                         COUNTDOWN_DOWN);
 
       /* led is already assigned */
 
       EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                          SW_C_INDEX,
                          BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE1);
+                         CountDown,
+                         COUNTDOWN_START);
 
       DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
                           SW_B_INDEX,

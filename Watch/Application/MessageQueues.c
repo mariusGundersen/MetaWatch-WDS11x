@@ -256,7 +256,7 @@ void PrintMessageType(tMessage* pMsg)
   case ModeTimeoutMsg:             PrintStringAndHexByte("ModeTimeoutMsg 0x",MessageType);         break;
   case WatchStatusMsg:             PrintStringAndHexByte("WatchStatusMsg 0x",MessageType);         break;
   case MenuModeMsg:                PrintStringAndHexByte("MenuModeMsg 0x",MessageType);            break;
-  case BarCode:                    PrintStringAndHexByte("BarCode 0x",MessageType);                break;
+  case CountDown:                    PrintStringAndHexByte("BarCode 0x",MessageType);                break;
   case ListPairedDevicesMsg:       PrintStringAndHexByte("ListPairedDevicesMsg 0x",MessageType);   break;
   case ConnectionStateChangeMsg:   PrintStringAndHexByte("ConnectionStateChangeMsg 0x",MessageType);  break;
   case ModifyTimeMsg:              PrintStringAndHexByte("ModifyTimeMsg 0x",MessageType);          break;
@@ -367,7 +367,7 @@ void RouteMsg(tMessage* pMsg)
     case ModeTimeoutMsg:                SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
     case WatchStatusMsg:                SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
     case MenuModeMsg:                   SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
-    case BarCode:                       SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
+    case CountDown:                     SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
     case ListPairedDevicesMsg:          SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
     case ConnectionStateChangeMsg:      SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
     case ModifyTimeMsg:                 SendMsgToQ(DISPLAY_QINDEX,pMsg);    break;
