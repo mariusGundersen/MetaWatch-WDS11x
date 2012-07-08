@@ -2638,12 +2638,14 @@ unsigned char LcdRtcUpdateHandlerIsr(void)
     }
   }
 
-  if( running ){
-	tMessage Msg;
-	SetupMessage(&Msg, CountDown, COUNTDOWN_TICK);
-	SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
-	ExitLpm = 1;
+  if(CurrentIdlePage == CountDownPage){
+    if( running ){
+      tMessage Msg;
+      SetupMessage(&Msg, CountDown, COUNTDOWN_TICK);
+	  SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
+	  ExitLpm = 1;
 
+	}
   }
 
   return ExitLpm;
