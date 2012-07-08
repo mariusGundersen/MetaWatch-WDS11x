@@ -62,6 +62,7 @@ static void DisplayTask(void *pvParameters);
 static void DisplayQueueMessageHandler(tMessage* pMsg);
 
 static tMessage DisplayMsg;
+static tMessage Msg;
 static tTimerId DisplayTimerId;
 static unsigned char RtcUpdateEnable;
 static unsigned char lastMin = 61;
@@ -82,7 +83,7 @@ static void ToggleSecondsHandler(unsigned char MsgOptions);
 static void ConnectionStateChangeHandler(void);
 
 /******************************************************************************/
-static void DrawCenteredMinSec(int Hour, int Minute, int Second, unsigned int y);
+static void DrawCenteredMinSec(int Minute, int Second, unsigned int y);
 static void DrawDateTime(unsigned char OnceConnected);
 static void DrawConnectionScreen(void);
 static void InitMyBuffer(void);
@@ -98,26 +99,21 @@ static void DrawMenu2(void);
 static void DrawMenu3(void);
 static void DrawCommonMenuIcons(void);
 
-static void FillMyBuffer(unsigned char StartingRow,
-                         unsigned char NumberOfRows,
-                         unsigned char FillValue);
+static void FillMyBuffer(unsigned char StartingRow, unsigned char NumberOfRows,
+		unsigned char FillValue);
 
 static void SendMyBufferToLcd(unsigned char StartingRow,
-                              unsigned char NumberOfRows);
+		unsigned char NumberOfRows);
 
 static void CopyRowsIntoMyBuffer(unsigned char const* pImage,
-                                 unsigned char StartingRow,
-                                 unsigned char NumberOfRows);
+		unsigned char StartingRow, unsigned char NumberOfRows);
 
 static void CopyColumnsIntoMyBuffer(unsigned char const* pImage,
-                                    unsigned char StartingRow,
-                                    unsigned char NumberOfRows,
-                                    unsigned char StartingColumn,
-                                    unsigned char NumberOfColumns);
+		unsigned char StartingRow, unsigned char NumberOfRows,
+		unsigned char StartingColumn, unsigned char NumberOfColumns);
 
-static void WriteIcon4w10h(unsigned char const * pIcon,
-                           unsigned char RowOffset,
-                           unsigned char ColumnOffset);
+static void WriteIcon4w10h(unsigned char const * pIcon, unsigned char RowOffset,
+		unsigned char ColumnOffset);
 
 static void DisplayAmPm(void);
 static void DisplayDayOfWeek(void);
@@ -144,23 +140,21 @@ static void SaveDisplaySeconds(void);
 
 /******************************************************************************/
 
-
 /******************************************************************************/
 
-typedef enum
-{
-  ReservedPage,
-  NormalPage,
-  /* the next three are only used on power-up */
-  RadioOnWithPairingInfoPage,
-  RadioOnWithoutPairingInfoPage,
-  BluetoothOffPage,
-  Menu1Page,
-  Menu2Page,
-  Menu3Page,
-  ListPairedDevicesPage,
-  WatchStatusPage,
-  CountDownPage
+typedef enum {
+	ReservedPage,
+	NormalPage,
+	/* the next three are only used on power-up */
+	RadioOnWithPairingInfoPage,
+	RadioOnWithoutPairingInfoPage,
+	BluetoothOffPage,
+	Menu1Page,
+	Menu2Page,
+	Menu3Page,
+	ListPairedDevicesPage,
+	WatchStatusPage,
+	CountDownPage
 
 } etIdlePageMode;
 
@@ -177,10 +171,10 @@ static void SetupNormalIdleScreenButtons(void);
 
 /******************************************************************************/
 
-const unsigned char pBarCodeImage[NUM_LCD_ROWS*NUM_LCD_COL_BYTES];
-const unsigned char pMetaWatchSplash[NUM_LCD_ROWS*NUM_LCD_COL_BYTES];
-const unsigned char Am[10*4];
-const unsigned char Pm[10*4];
+const unsigned char pBarCodeImage[NUM_LCD_ROWS * NUM_LCD_COL_BYTES];
+const unsigned char pMetaWatchSplash[NUM_LCD_ROWS * NUM_LCD_COL_BYTES];
+const unsigned char Am[10 * 4];
+const unsigned char Pm[10 * 4];
 //const unsigned char DaysOfWeek[7][10*4];
 
 /******************************************************************************/
@@ -206,2324 +200,1993 @@ static void WriteFontString(tString* pString);
  *
  * \return none, result is to start the display task
  */
-void InitializeDisplayTask(void)
-{
-  InitMyBuffer();
+void InitializeDisplayTask(void) {
+	InitMyBuffer();
 
-  QueueHandles[DISPLAY_QINDEX] =
-    xQueueCreate( DISPLAY_TASK_QUEUE_LENGTH, MESSAGE_QUEUE_ITEM_SIZE  );
+	QueueHandles[DISPLAY_QINDEX] = xQueueCreate(DISPLAY_TASK_QUEUE_LENGTH,
+			MESSAGE_QUEUE_ITEM_SIZE);
 
-  // task function, task name, stack len , task params, priority, task handle
-  xTaskCreate(DisplayTask,
-              (const signed char *)"DISPLAY",
-              DISPLAY_TASK_STACK_SIZE,
-              NULL,
-              DISPLAY_TASK_PRIORITY,
-              &DisplayHandle);
+	// task function, task name, stack len , task params, priority, task handle
+	xTaskCreate(DisplayTask, (const signed char *)"DISPLAY",
+			DISPLAY_TASK_STACK_SIZE, NULL, DISPLAY_TASK_PRIORITY,
+			&DisplayHandle);
 
-
-  ClearShippingModeFlag();
+	ClearShippingModeFlag();
 
 }
-
-
 
 /*! LCD Task Main Loop
  *
  * \param pvParameters
  *
  */
-static void DisplayTask(void *pvParameters)
-{
-  if ( QueueHandles[DISPLAY_QINDEX] == 0 )
-  {
-    PrintString("Display Queue not created!\r\n");
-  }
+static void DisplayTask(void *pvParameters) {
+	if (QueueHandles[DISPLAY_QINDEX] == 0) {
+		PrintString("Display Queue not created!\r\n");
+	}
 
-  LcdPeripheralInit();
+	LcdPeripheralInit();
 
-  DisplayStartupScreen();
+	DisplayStartupScreen();
 
-  SerialRamInit();
+	SerialRamInit();
 
-  InitializeIdleBufferConfig();
-  InitializeIdleBufferInvert();
-  InitializeDisplaySeconds();
-  InitializeLinkAlarmEnable();
-  InitializeModeTimeouts();
-  InitializeTimeFormat();
-  InitializeDateFormat();
-  AllocateDisplayTimers();
-  SetupSplashScreenTimeout();
+	InitializeIdleBufferConfig();
+	InitializeIdleBufferInvert();
+	InitializeDisplaySeconds();
+	InitializeLinkAlarmEnable();
+	InitializeModeTimeouts();
+	InitializeTimeFormat();
+	InitializeDateFormat();
+	AllocateDisplayTimers();
+	SetupSplashScreenTimeout();
 
-  DontChangeButtonConfiguration();
-  DefaultApplicationAndNotificationButtonConfiguration();
-  SetupNormalIdleScreenButtons();
+	DontChangeButtonConfiguration();
+	DefaultApplicationAndNotificationButtonConfiguration();
+	SetupNormalIdleScreenButtons();
 
 #ifndef ISOLATE_RADIO
-  /* turn the radio on; initialize the serial port profile or BLE/GATT */
-  tMessage Msg;
-  SetupMessage(&Msg,TurnRadioOnMsg,NO_MSG_OPTIONS);
-  RouteMsg(&Msg);
+	/* turn the radio on; initialize the serial port profile or BLE/GATT */
+	tMessage Msg;
+	SetupMessage(&Msg, TurnRadioOnMsg, NO_MSG_OPTIONS);
+	RouteMsg(&Msg);
 #endif
 
-  for(;;)
-  {
-    if( pdTRUE == xQueueReceive(QueueHandles[DISPLAY_QINDEX],
-                                &DisplayMsg, portMAX_DELAY) )
-    {
-      PrintMessageType(&DisplayMsg);
+	for (;;) {
+		if (pdTRUE == xQueueReceive(QueueHandles[DISPLAY_QINDEX],
+				&DisplayMsg, portMAX_DELAY)) {
+			PrintMessageType(&DisplayMsg);
 
-      DisplayQueueMessageHandler(&DisplayMsg);
+			DisplayQueueMessageHandler(&DisplayMsg);
 
-      SendToFreeQueue(&DisplayMsg);
+			SendToFreeQueue(&DisplayMsg);
 
-      CheckStackUsage(DisplayHandle,"Display");
+			CheckStackUsage(DisplayHandle, "Display");
 
-      CheckQueueUsage(QueueHandles[DISPLAY_QINDEX]);
+			CheckQueueUsage(QueueHandles[DISPLAY_QINDEX]);
 
-    }
-  }
+		}
+	}
 }
 
 /*! Display the startup image or Splash Screen */
-static void DisplayStartupScreen(void)
-{
-  /* draw metawatch logo */
-  CopyRowsIntoMyBuffer(pMetaWatchSplash,STARTING_ROW,NUM_LCD_ROWS);
-  SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
+static void DisplayStartupScreen(void) {
+	/* draw metawatch logo */
+	CopyRowsIntoMyBuffer(pMetaWatchSplash, STARTING_ROW, NUM_LCD_ROWS);
+	SendMyBufferToLcd(STARTING_ROW, NUM_LCD_ROWS);
 }
 
 /*! Handle the messages routed to the display queue */
-static void DisplayQueueMessageHandler(tMessage* pMsg)
-{
-  unsigned char Type = pMsg->Type;
+static void DisplayQueueMessageHandler(tMessage* pMsg) {
+	unsigned char Type = pMsg->Type;
 
-  switch(Type)
-  {
+	switch (Type) {
 
-  case WriteBuffer:
-    WriteBufferHandler(pMsg);
-    break;
+	case WriteBuffer:
+		WriteBufferHandler(pMsg);
+		break;
 
-  case LoadTemplate:
-    LoadTemplateHandler(pMsg);
-    break;
+	case LoadTemplate:
+		LoadTemplateHandler(pMsg);
+		break;
 
-  case UpdateDisplay:
-    UpdateDisplayHandler(pMsg);
-    break;
+	case UpdateDisplay:
+		UpdateDisplayHandler(pMsg);
+		break;
 
-  case IdleUpdate:
-      IdleUpdateHandler();
-    break;
+	case IdleUpdate:
+		IdleUpdateHandler();
+		break;
 
-  case ChangeModeMsg:
-    ChangeModeHandler(pMsg);
-    break;
+	case ChangeModeMsg:
+		ChangeModeHandler(pMsg);
+		break;
 
-  case ModeTimeoutMsg:
-    ModeTimeoutHandler(pMsg);
-    break;
+	case ModeTimeoutMsg:
+		ModeTimeoutHandler(pMsg);
+		break;
 
-  case WatchStatusMsg:
-    WatchStatusScreenHandler();
-    break;
+	case WatchStatusMsg:
+		WatchStatusScreenHandler();
+		break;
 
-  case CountDown:
-    BarCodeHandler(pMsg);
-    break;
+	case CountDown:
+		BarCodeHandler(pMsg);
+		break;
 
-  case ListPairedDevicesMsg:
-    ListPairedDevicesHandler();
-    break;
+	case ListPairedDevicesMsg:
+		ListPairedDevicesHandler();
+		break;
 
-  case WatchDrawnScreenTimeout:
-    IdleUpdateHandler();
-    break;
+	case WatchDrawnScreenTimeout:
+		IdleUpdateHandler();
+		break;
 
-  case ConfigureDisplay:
-    ConfigureDisplayHandler(pMsg);
-    break;
+	case ConfigureDisplay:
+		ConfigureDisplayHandler(pMsg);
+		break;
 
-  case ConfigureIdleBufferSize:
-    ConfigureIdleBufferSizeHandler(pMsg);
-    break;
+	case ConfigureIdleBufferSize:
+		ConfigureIdleBufferSizeHandler(pMsg);
+		break;
 
-  case ConnectionStateChangeMsg:
-    ConnectionStateChangeHandler();
-    break;
+	case ConnectionStateChangeMsg:
+		ConnectionStateChangeHandler();
+		break;
 
-  case ModifyTimeMsg:
-    ModifyTimeHandler(pMsg);
-    break;
+	case ModifyTimeMsg:
+		ModifyTimeHandler(pMsg);
+		break;
 
-  case MenuModeMsg:
-    MenuModeHandler(pMsg->Options);
-    break;
+	case MenuModeMsg:
+		MenuModeHandler(pMsg->Options);
+		break;
 
-  case MenuButtonMsg:
-    MenuButtonHandler(pMsg->Options);
-    break;
+	case MenuButtonMsg:
+		MenuButtonHandler(pMsg->Options);
+		break;
 
-  case ToggleSecondsMsg:
-    ToggleSecondsHandler(pMsg->Options);
-    break;
+	case ToggleSecondsMsg:
+		ToggleSecondsHandler(pMsg->Options);
+		break;
 
-  case SplashTimeoutMsg:
-    AllowConnectionStateChangeToUpdateScreen = 1;
-    IdleUpdateHandler();
-    break;
+	case SplashTimeoutMsg:
+		AllowConnectionStateChangeToUpdateScreen = 1;
+		IdleUpdateHandler();
+		break;
 
-  case LowBatteryWarningMsg:
-  case LowBatteryBtOffMsg:
-    break;
+	case LowBatteryWarningMsg:
+	case LowBatteryBtOffMsg:
+		break;
 
-  case LinkAlarmMsg:
-    if ( QueryLinkAlarmEnable() )
-    {
-      GenerateLinkAlarm();
-    }
-    break;
+	case LinkAlarmMsg:
+		if (QueryLinkAlarmEnable()) {
+			GenerateLinkAlarm();
+		}
+		break;
 
-  case RamTestMsg:
-    RamTestHandler(pMsg);
-    break;
+	case RamTestMsg:
+		RamTestHandler(pMsg);
+		break;
 
-  default:
-    PrintStringAndHex("<<Unhandled Message>> in Lcd Display Task: Type 0x", Type);
-    break;
-  }
+	default:
+		PrintStringAndHex("<<Unhandled Message>> in Lcd Display Task: Type 0x",
+				Type);
+		break;
+	}
 
 }
 
 /*! Allocate ids and setup timers for the display modes */
-static void AllocateDisplayTimers(void)
-{
-  DisplayTimerId = AllocateOneSecondTimer();
+static void AllocateDisplayTimers(void) {
+	DisplayTimerId = AllocateOneSecondTimer();
 }
 
-static void SetupSplashScreenTimeout(void)
-{
-  SetupOneSecondTimer(DisplayTimerId,
-                      ONE_SECOND*3,
-                      NO_REPEAT,
-                      DISPLAY_QINDEX,
-                      SplashTimeoutMsg,
-                      NO_MSG_OPTIONS);
+static void SetupSplashScreenTimeout(void) {
+	SetupOneSecondTimer(DisplayTimerId, ONE_SECOND * 3, NO_REPEAT,
+			DISPLAY_QINDEX, SplashTimeoutMsg, NO_MSG_OPTIONS);
 
-  StartOneSecondTimer(DisplayTimerId);
+	StartOneSecondTimer(DisplayTimerId);
 
-  AllowConnectionStateChangeToUpdateScreen = 0;
+	AllowConnectionStateChangeToUpdateScreen = 0;
 
 }
 
-static inline void StopDisplayTimer(void)
-{
-  RtcUpdateEnable = 0;
-  StopOneSecondTimer(DisplayTimerId);
+static inline void StopDisplayTimer(void) {
+	RtcUpdateEnable = 0;
+	StopOneSecondTimer(DisplayTimerId);
 }
 
 /*! Draw the Idle screen and cause the remainder of the display to be updated
  * also
  */
-static void IdleUpdateHandler()
-{
-  if (CurrentMode != IDLE_MODE) return;
-    
-  StopDisplayTimer();
+static void IdleUpdateHandler() {
+	if (CurrentMode != IDLE_MODE)
+		return;
 
-  /* allow rtc to send IdleUpdate every minute (or second) */
-  RtcUpdateEnable = 1;
+	StopDisplayTimer();
 
-  if (OnceConnected() && nvIdleBufferConfig == WATCH_CONTROLS_TOP || !OnceConnected())
-  {
-    /* draw the date & time area */
-    FillMyBuffer(STARTING_ROW, WATCH_DRAWN_IDLE_BUFFER_ROWS, 0x00);
-    DrawDateTime(OnceConnected());
-    SendMyBufferToLcd(STARTING_ROW, WATCH_DRAWN_IDLE_BUFFER_ROWS);
-  }
-  
-  if (!OnceConnected())
-  {
-    DetermineIdlePage();
-    if (CurrentIdlePage != LastIdlePage)
-    {
-      FillMyBuffer(STARTING_ROW + WATCH_DRAWN_IDLE_BUFFER_ROWS, 
-                   PHONE_IDLE_BUFFER_ROWS, 0x00);
-      DrawConnectionScreen();
-      SendMyBufferToLcd(STARTING_ROW + WATCH_DRAWN_IDLE_BUFFER_ROWS, 
-                        PHONE_IDLE_BUFFER_ROWS);
-    }
-  }
-  else if (CurrentIdlePage != NormalPage || LastMode != IDLE_MODE)
-  {
-    CurrentIdlePage = NormalPage;
-    LastMode = IDLE_MODE;
-    tMessage OutgoingMsg;
-    SetupMessage(&OutgoingMsg, UpdateDisplay, IDLE_MODE | FORCE_UPDATE);
-    RouteMsg(&OutgoingMsg);
-  }
-  
-  ConfigureIdleUserInterfaceButtons();  
+	/* allow rtc to send IdleUpdate every minute (or second) */
+	RtcUpdateEnable = 1;
+
+	if (OnceConnected() && nvIdleBufferConfig == WATCH_CONTROLS_TOP
+			|| !OnceConnected()) {
+		/* draw the date & time area */
+		FillMyBuffer(STARTING_ROW, WATCH_DRAWN_IDLE_BUFFER_ROWS, 0x00);
+		DrawDateTime(OnceConnected());
+		SendMyBufferToLcd(STARTING_ROW, WATCH_DRAWN_IDLE_BUFFER_ROWS);
+	}
+
+	if (!OnceConnected()) {
+		DetermineIdlePage();
+		if (CurrentIdlePage != LastIdlePage) {
+			FillMyBuffer(STARTING_ROW + WATCH_DRAWN_IDLE_BUFFER_ROWS,
+					PHONE_IDLE_BUFFER_ROWS, 0x00);
+			DrawConnectionScreen();
+			SendMyBufferToLcd(STARTING_ROW + WATCH_DRAWN_IDLE_BUFFER_ROWS,
+					PHONE_IDLE_BUFFER_ROWS);
+		}
+	} else if (CurrentIdlePage != NormalPage || LastMode != IDLE_MODE) {
+		CurrentIdlePage = NormalPage;
+		LastMode = IDLE_MODE;
+		tMessage OutgoingMsg;
+		SetupMessage(&OutgoingMsg, UpdateDisplay, IDLE_MODE | FORCE_UPDATE);
+		RouteMsg(&OutgoingMsg);
+	}
+
+	ConfigureIdleUserInterfaceButtons();
 }
 
-static void DetermineIdlePage(void)
-{
-  etConnectionState cs = QueryConnectionState();
+static void DetermineIdlePage(void) {
+	etConnectionState cs = QueryConnectionState();
 
-  switch (cs)
-  {
-  case Initializing:       CurrentIdlePage = BluetoothOffPage;              break;
-  case ServerFailure:      CurrentIdlePage = BluetoothOffPage;              break;
-  case RadioOn:            CurrentIdlePage = RadioOnWithoutPairingInfoPage; break;
-  case Paired:             CurrentIdlePage = RadioOnWithPairingInfoPage;    break;
-  case LEConnected:        CurrentIdlePage = NormalPage;                    break;
-  case BRConnected:        CurrentIdlePage = NormalPage;                    break;
-  case RadioOff:           CurrentIdlePage = BluetoothOffPage;              break;
-  case RadioOffLowBattery: CurrentIdlePage = BluetoothOffPage;              break;
-  case ShippingMode:       CurrentIdlePage = BluetoothOffPage;              break;
-  default:                 CurrentIdlePage = BluetoothOffPage;              break;
-  }
+	switch (cs) {
+	case Initializing:
+		CurrentIdlePage = BluetoothOffPage;
+		break;
+	case ServerFailure:
+		CurrentIdlePage = BluetoothOffPage;
+		break;
+	case RadioOn:
+		CurrentIdlePage = RadioOnWithoutPairingInfoPage;
+		break;
+	case Paired:
+		CurrentIdlePage = RadioOnWithPairingInfoPage;
+		break;
+	case LEConnected:
+		CurrentIdlePage = NormalPage;
+		break;
+	case BRConnected:
+		CurrentIdlePage = NormalPage;
+		break;
+	case RadioOff:
+		CurrentIdlePage = BluetoothOffPage;
+		break;
+	case RadioOffLowBattery:
+		CurrentIdlePage = BluetoothOffPage;
+		break;
+	case ShippingMode:
+		CurrentIdlePage = BluetoothOffPage;
+		break;
+	default:
+		CurrentIdlePage = BluetoothOffPage;
+		break;
+	}
 
-  /* if the radio is on but hasn't paired yet then don't show the pairing icon */
-  if ( CurrentIdlePage == RadioOnWithoutPairingInfoPage )
-  {
-    if ( QueryValidPairingInfo() )
-    {
-      CurrentIdlePage = RadioOnWithPairingInfoPage;
-    }
-  }
+	/* if the radio is on but hasn't paired yet then don't show the pairing icon */
+	if (CurrentIdlePage == RadioOnWithoutPairingInfoPage) {
+		if (QueryValidPairingInfo()) {
+			CurrentIdlePage = RadioOnWithPairingInfoPage;
+		}
+	}
 }
 
-static void ConnectionStateChangeHandler(void)
-{
-  if ( AllowConnectionStateChangeToUpdateScreen )
-  {
-    if (CurrentMode != IDLE_MODE)
-    {
-      LastMode = CurrentMode;
-      CurrentMode = IDLE_MODE;
-    }
-    
-    /* certain pages should not be exited when a change in the
-     * connection state has occurred
-     */
-    switch ( CurrentIdlePage )
-    {
-    case ReservedPage:
-    case NormalPage:
-    case RadioOnWithPairingInfoPage:
-    case RadioOnWithoutPairingInfoPage:
-    case BluetoothOffPage:
-      IdleUpdateHandler();
-      break;
+static void ConnectionStateChangeHandler(void) {
+	if (AllowConnectionStateChangeToUpdateScreen) {
+		if (CurrentMode != IDLE_MODE) {
+			LastMode = CurrentMode;
+			CurrentMode = IDLE_MODE;
+		}
 
-    case Menu1Page:
-    case Menu2Page:
-    case Menu3Page:
-      MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
-      break;
+		/* certain pages should not be exited when a change in the
+		 * connection state has occurred
+		 */
+		switch (CurrentIdlePage) {
+		case ReservedPage:
+		case NormalPage:
+		case RadioOnWithPairingInfoPage:
+		case RadioOnWithoutPairingInfoPage:
+		case BluetoothOffPage:
+			IdleUpdateHandler();
+			break;
 
-    case ListPairedDevicesPage:
-      ListPairedDevicesHandler();
-      break;
+		case Menu1Page:
+		case Menu2Page:
+		case Menu3Page:
+			MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
+			break;
 
-    case WatchStatusPage:
-      WatchStatusScreenHandler();
-      break;
+		case ListPairedDevicesPage:
+			ListPairedDevicesHandler();
+			break;
 
-    case CountDownPage:
-      break;
+		case WatchStatusPage:
+			WatchStatusScreenHandler();
+			break;
 
-    default:
-      break;
-    }
-  }
+		case CountDownPage:
+			break;
+
+		default:
+			break;
+		}
+	}
 }
 
-unsigned char QueryButtonMode(void)
-{
-  unsigned char result;
+unsigned char QueryButtonMode(void) {
+	unsigned char result;
 
-  switch (CurrentMode)
-  {
+	switch (CurrentMode) {
 
-  case IDLE_MODE:
-    if ( CurrentIdlePage == NormalPage )
-    {
-      result = NORMAL_IDLE_SCREEN_BUTTON_MODE;
-    }
-    else
-    {
-      result = WATCH_DRAWN_SCREEN_BUTTON_MODE;
-    }
-    break;
+	case IDLE_MODE:
+		if (CurrentIdlePage == NormalPage) {
+			result = NORMAL_IDLE_SCREEN_BUTTON_MODE;
+		} else {
+			result = WATCH_DRAWN_SCREEN_BUTTON_MODE;
+		}
+		break;
 
-  case APPLICATION_MODE:
-    result = APPLICATION_SCREEN_BUTTON_MODE;
-    break;
+	case APPLICATION_MODE:
+		result = APPLICATION_SCREEN_BUTTON_MODE;
+		break;
 
-  case NOTIFICATION_MODE:
-    result = NOTIFICATION_BUTTON_MODE;
-    break;
+	case NOTIFICATION_MODE:
+		result = NOTIFICATION_BUTTON_MODE;
+		break;
 
-  case SCROLL_MODE:
-    result = SCROLL_MODE;
-    break;
+	case SCROLL_MODE:
+		result = SCROLL_MODE;
+		break;
 
-  }
+	}
 
-  return result;
+	return result;
 }
 
-static void ChangeModeHandler(tMessage* pMsg)
-{
-  LastMode = CurrentMode;
-  CurrentMode = (pMsg->Options & MODE_MASK);
+static void ChangeModeHandler(tMessage* pMsg) {
+	LastMode = CurrentMode;
+	CurrentMode = (pMsg->Options & MODE_MASK);
 
-  unsigned int timeout;
+	unsigned int timeout;
 
-  switch ( CurrentMode )
-  {
+	switch (CurrentMode) {
 
-  case IDLE_MODE:
+	case IDLE_MODE:
 
-    /* this check is so that the watch apps don't mess up the timer */
-    if ( LastMode != CurrentMode )
-    {
-      /* idle update handler will stop display timer */
-      IdleUpdateHandler();
-    }
-    PrintString2("Changing mode to Idle", LastMode != CurrentMode ? "\r\n" : " ALREADY\r\n");
-    break;
+		/* this check is so that the watch apps don't mess up the timer */
+		if (LastMode != CurrentMode) {
+			/* idle update handler will stop display timer */
+			IdleUpdateHandler();
+		}
+		PrintString2("Changing mode to Idle",
+				LastMode != CurrentMode ? "\r\n" : " ALREADY\r\n");
+		break;
 
-  case APPLICATION_MODE:
+	case APPLICATION_MODE:
 
-    StopDisplayTimer();
+		StopDisplayTimer();
 
-    timeout = QueryApplicationModeTimeout();
+		timeout = QueryApplicationModeTimeout();
 
-    /* don't start the timer if the timeout == 0
-     * this invites things that look like lock ups...
-     * it is preferred to make this a large value
-     */
-    if ( timeout )
-    {
-      SetupOneSecondTimer(DisplayTimerId,
-                          timeout,
-                          NO_REPEAT,
-                          DISPLAY_QINDEX,
-                          ModeTimeoutMsg,
-                          APPLICATION_MODE);
+		/* don't start the timer if the timeout == 0
+		 * this invites things that look like lock ups...
+		 * it is preferred to make this a large value
+		 */
+		if (timeout) {
+			SetupOneSecondTimer(DisplayTimerId, timeout, NO_REPEAT,
+					DISPLAY_QINDEX, ModeTimeoutMsg, APPLICATION_MODE);
 
-      StartOneSecondTimer(DisplayTimerId);
-    }
+			StartOneSecondTimer(DisplayTimerId);
+		}
 
-    PrintString("Changing mode to Application\r\n");
-    break;
+		PrintString("Changing mode to Application\r\n");
+		break;
 
-  case NOTIFICATION_MODE:
+	case NOTIFICATION_MODE:
 
-    StopDisplayTimer();
+		StopDisplayTimer();
 
-    timeout = QueryNotificationModeTimeout();
+		timeout = QueryNotificationModeTimeout();
 
-    if ( timeout )
-    {
-      SetupOneSecondTimer(DisplayTimerId,
-                          timeout,
-                          NO_REPEAT,
-                          DISPLAY_QINDEX,
-                          ModeTimeoutMsg,
-                          NOTIFICATION_MODE);
+		if (timeout) {
+			SetupOneSecondTimer(DisplayTimerId, timeout, NO_REPEAT,
+					DISPLAY_QINDEX, ModeTimeoutMsg, NOTIFICATION_MODE);
 
-      StartOneSecondTimer(DisplayTimerId);
-    }
+			StartOneSecondTimer(DisplayTimerId);
+		}
 
-    PrintString("Changing mode to Notification\r\n");
-    break;
+		PrintString("Changing mode to Notification\r\n");
+		break;
 
-  default:
-    break;
-  }
+	default:
+		break;
+	}
 
-  /*
-   * send a message to the Host indicating buffer update / mode change
-   * has completed (don't send message if it is just watch updating time ).
-   */
-  if ( LastMode != CurrentMode )
-  {
-    tMessage OutgoingMsg;
-    SetupMessageAndAllocateBuffer(&OutgoingMsg,
-                                  StatusChangeEvent,
-                                  IDLE_MODE);
+	/*
+	 * send a message to the Host indicating buffer update / mode change
+	 * has completed (don't send message if it is just watch updating time ).
+	 */
+	if (LastMode != CurrentMode) {
+		tMessage OutgoingMsg;
+		SetupMessageAndAllocateBuffer(&OutgoingMsg, StatusChangeEvent,
+				IDLE_MODE);
 
-    OutgoingMsg.pBuffer[0] = (unsigned char)eScUpdateComplete;
-    OutgoingMsg.Length = 1;
-    RouteMsg(&OutgoingMsg);
-  }
+		OutgoingMsg.pBuffer[0] = (unsigned char) eScUpdateComplete;
+		OutgoingMsg.Length = 1;
+		RouteMsg(&OutgoingMsg);
+	}
 }
 
-static void ModeTimeoutHandler(tMessage* pMsg)
-{
-  switch ( CurrentMode )
-  {
+static void ModeTimeoutHandler(tMessage* pMsg) {
+	switch (CurrentMode) {
 
-  case IDLE_MODE:
-    break;
+	case IDLE_MODE:
+		break;
 
-  case APPLICATION_MODE:
-  case NOTIFICATION_MODE:
-  case SCROLL_MODE:
-    /* go back to idle mode */
-    LastMode = CurrentMode;
-    CurrentMode = IDLE_MODE;
-    IdleUpdateHandler();
-    break;
+	case APPLICATION_MODE:
+	case NOTIFICATION_MODE:
+	case SCROLL_MODE:
+		/* go back to idle mode */
+		LastMode = CurrentMode;
+		CurrentMode = IDLE_MODE;
+		IdleUpdateHandler();
+		break;
 
-  default:
-    break;
-  }
+	default:
+		break;
+	}
 
-  /* send a message to the host indicating that a timeout occurred */
-  tMessage OutgoingMsg;
-  SetupMessageAndAllocateBuffer(&OutgoingMsg,
-                                StatusChangeEvent,
-                                CurrentMode);
+	/* send a message to the host indicating that a timeout occurred */
+	tMessage OutgoingMsg;
+	SetupMessageAndAllocateBuffer(&OutgoingMsg, StatusChangeEvent, CurrentMode);
 
-  OutgoingMsg.pBuffer[0] = (unsigned char)eScModeTimeout;
-  OutgoingMsg.Length = 1;
-  RouteMsg(&OutgoingMsg);
+	OutgoingMsg.pBuffer[0] = (unsigned char) eScModeTimeout;
+	OutgoingMsg.Length = 1;
+	RouteMsg(&OutgoingMsg);
 
 }
 
+static void WatchStatusScreenHandler(void) {
+	StopDisplayTimer();
 
-static void WatchStatusScreenHandler(void)
-{
-  StopDisplayTimer();
+	FillMyBuffer(STARTING_ROW, NUM_LCD_ROWS, 0x00);
 
-  FillMyBuffer(STARTING_ROW,NUM_LCD_ROWS,0x00);
+	/*
+	 * Add Status Icons
+	 */
+	unsigned char const * pIcon;
 
-  /*
-   * Add Status Icons
-   */
-  unsigned char const * pIcon;
+	if (QueryBluetoothOn()) {
+		pIcon = pBluetoothOnStatusScreenIcon;
+	} else {
+		pIcon = pBluetoothOffStatusScreenIcon;
+	}
 
-  if ( QueryBluetoothOn() )
-  {
-    pIcon = pBluetoothOnStatusScreenIcon;
-  }
-  else
-  {
-    pIcon = pBluetoothOffStatusScreenIcon;
-  }
+	CopyColumnsIntoMyBuffer(pIcon, 0, STATUS_ICON_SIZE_IN_ROWS,
+			LEFT_STATUS_ICON_COLUMN, STATUS_ICON_SIZE_IN_COLUMNS);
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          0,
-                          STATUS_ICON_SIZE_IN_ROWS,
-                          LEFT_STATUS_ICON_COLUMN,
-                          STATUS_ICON_SIZE_IN_COLUMNS);
+	if (QueryPhoneConnected()) {
+		pIcon = pPhoneConnectedStatusScreenIcon;
+	} else {
+		pIcon = pPhoneDisconnectedStatusScreenIcon;
+	}
 
+	CopyColumnsIntoMyBuffer(pIcon, 0, STATUS_ICON_SIZE_IN_ROWS,
+			CENTER_STATUS_ICON_COLUMN, STATUS_ICON_SIZE_IN_COLUMNS);
 
-  if ( QueryPhoneConnected() )
-  {
-    pIcon = pPhoneConnectedStatusScreenIcon;
-  }
-  else
-  {
-    pIcon = pPhoneDisconnectedStatusScreenIcon;
-  }
+	unsigned int bV = ReadBatterySenseAverage();
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          0,
-                          STATUS_ICON_SIZE_IN_ROWS,
-                          CENTER_STATUS_ICON_COLUMN,
-                          STATUS_ICON_SIZE_IN_COLUMNS);
+	if (QueryBatteryCharging()) {
+		pIcon = pBatteryChargingStatusScreenIcon;
+	} else {
+		if (bV > 4000) {
+			pIcon = pBatteryFullStatusScreenIcon;
+		} else if (bV < 3500) {
+			pIcon = pBatteryLowStatusScreenIcon;
+		} else {
+			pIcon = pBatteryMediumStatusScreenIcon;
+		}
+	}
 
-  unsigned int bV = ReadBatterySenseAverage();
+	CopyColumnsIntoMyBuffer(pIcon, 0, STATUS_ICON_SIZE_IN_ROWS,
+			RIGHT_STATUS_ICON_COLUMN, STATUS_ICON_SIZE_IN_COLUMNS);
 
-  if ( QueryBatteryCharging() )
-  {
-    pIcon = pBatteryChargingStatusScreenIcon;
-  }
-  else
-  {
-    if ( bV > 4000 )
-    {
-      pIcon = pBatteryFullStatusScreenIcon;
-    }
-    else if ( bV < 3500 )
-    {
-      pIcon = pBatteryLowStatusScreenIcon;
-    }
-    else
-    {
-      pIcon = pBatteryMediumStatusScreenIcon;
-    }
-  }
+	/* display battery voltage */
+	unsigned char msd = 0;
 
+	gRow = 27 + 2;
+	gColumn = 8;
+	gBitColumnMask = BIT6;
+	SetFont(MetaWatch7);
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          0,
-                          STATUS_ICON_SIZE_IN_ROWS,
-                          RIGHT_STATUS_ICON_COLUMN,
-                          STATUS_ICON_SIZE_IN_COLUMNS);
+	msd = bV / 1000;
+	bV = bV % 1000;
+	WriteFontCharacter(msd + '0');
+	WriteFontCharacter('.');
 
-  /* display battery voltage */
-  unsigned char msd = 0;
+	msd = bV / 100;
+	bV = bV % 100;
+	WriteFontCharacter(msd + '0');
 
-  gRow = 27+2;
-  gColumn = 8;
-  gBitColumnMask = BIT6;
-  SetFont(MetaWatch7);
+	msd = bV / 10;
+	bV = bV % 10;
+	WriteFontCharacter(msd + '0');
+	WriteFontCharacter(bV + '0');
 
+	/*
+	 * Add Wavy line
+	 */
+	gRow += 12;
+	CopyRowsIntoMyBuffer(pWavyLine, gRow, NUMBER_OF_ROWS_IN_WAVY_LINE);
 
-  msd = bV / 1000;
-  bV = bV % 1000;
-  WriteFontCharacter(msd+'0');
-  WriteFontCharacter('.');
+	/*
+	 * Add details
+	 */
 
-  msd = bV / 100;
-  bV = bV % 100;
-  WriteFontCharacter(msd+'0');
+	/* add MAC address */
+	gRow += NUMBER_OF_ROWS_IN_WAVY_LINE + 2;
+	gColumn = 0;
+	gBitColumnMask = BIT4;
+	WriteFontString(GetLocalBluetoothAddressString());
 
-  msd = bV / 10;
-  bV = bV % 10;
-  WriteFontCharacter(msd+'0');
-  WriteFontCharacter(bV+'0');
+	/* add the firmware version */
+	gRow += 12;
+	gColumn = 0;
+	gBitColumnMask = BIT4;
+	DrawVersionInfo(12);
 
-  /*
-   * Add Wavy line
-   */
-  gRow += 12;
-  CopyRowsIntoMyBuffer(pWavyLine,gRow,NUMBER_OF_ROWS_IN_WAVY_LINE);
+	/* display entire buffer */
+	SendMyBufferToLcd(STARTING_ROW, NUM_LCD_ROWS);
 
+	CurrentIdlePage = WatchStatusPage;
+	ConfigureIdleUserInterfaceButtons();
 
-  /*
-   * Add details
-   */
+	/* refresh the status page once a minute */
+	SetupOneSecondTimer(DisplayTimerId, ONE_SECOND * 60, NO_REPEAT,
+			DISPLAY_QINDEX, WatchStatusMsg, NO_MSG_OPTIONS);
 
-  /* add MAC address */
-  gRow += NUMBER_OF_ROWS_IN_WAVY_LINE+2;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
-  WriteFontString(GetLocalBluetoothAddressString());
-
-  /* add the firmware version */
-  gRow += 12;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
-  DrawVersionInfo(12);
-
-  /* display entire buffer */
-  SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
-
-  CurrentIdlePage = WatchStatusPage;
-  ConfigureIdleUserInterfaceButtons();
-
-  /* refresh the status page once a minute */
-  SetupOneSecondTimer(DisplayTimerId,
-                      ONE_SECOND*60,
-                      NO_REPEAT,
-                      DISPLAY_QINDEX,
-                      WatchStatusMsg,
-                      NO_MSG_OPTIONS);
-
-  StartOneSecondTimer(DisplayTimerId);
+	StartOneSecondTimer(DisplayTimerId);
 
 }
 
-static void DrawVersionInfo(unsigned char RowHeight)
-{
-  WriteFontString("App ");
-  WriteFontString(VERSION_STRING);
-  WriteFontString(" Msp430 ");
-  WriteFontCharacter(GetMsp430HardwareRevision());
+static void DrawVersionInfo(unsigned char RowHeight) {
+	WriteFontString("App ");
+	WriteFontString(VERSION_STRING);
+	WriteFontString(" Msp430 ");
+	WriteFontCharacter(GetMsp430HardwareRevision());
 
-  /* stack version */
-  gRow += RowHeight;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
-  tVersion Version = GetWrapperVersion();
-  WriteFontString("Stk ");
-  WriteFontString(Version.pSwVer);
-  WriteFontString(" ");
-  WriteFontString(Version.pBtVer);
-  WriteFontString(" ");
-  WriteFontString(Version.pHwVer);
+	/* stack version */
+	gRow += RowHeight;
+	gColumn = 0;
+	gBitColumnMask = BIT4;
+	tVersion Version = GetWrapperVersion();
+	WriteFontString("Stk ");
+	WriteFontString(Version.pSwVer);
+	WriteFontString(" ");
+	WriteFontString(Version.pBtVer);
+	WriteFontString(" ");
+	WriteFontString(Version.pHwVer);
 }
 
 /* the bar code should remain displayed until the button is pressed again
  * or another mode is started
  */
 
-static unsigned int toHour,
-					toMin,
-					toSec,
-					running = 0,
-					diff = 10;
+static void vibrateCountdown(char on, char off, char repeat) {
+	/* now send a vibration to the wearer */
+	SetupMessageAndAllocateBuffer(&Msg, SetVibrateMode, NO_MSG_OPTIONS);
 
-static void BarCodeHandler(tMessage* pMsg)
-{
-  StopDisplayTimer();
+	tSetVibrateModePayload* pMsgData;
+	pMsgData = (tSetVibrateModePayload*) Msg.pBuffer;
 
-  FillMyBuffer(STARTING_ROW,NUM_LCD_ROWS,0x00);
+	pMsgData->Enable = 1;
+	pMsgData->OnDurationLsb = on;
+	pMsgData->OnDurationMsb = 0x00;
+	pMsgData->OffDurationLsb = off;
+	pMsgData->OffDurationMsb = 0x00;
+	pMsgData->NumberOfCycles = repeat;
 
-  int clockHour=RTCHOUR,
-       clockMin=RTCMIN,
-       clockSec=RTCSEC;
+	RouteMsg(&Msg);
 
-  if(!running){
-	  switch (pMsg->Options) {
-	    case COUNTDOWN_START:
-	      running = 1;
-	      break;
+}
+
+static unsigned char toHour, toMin, toSec, running = 0, diff = 5;
+
+static void BarCodeHandler(tMessage* pMsg) {
+	StopDisplayTimer();
+
+	FillMyBuffer(STARTING_ROW, NUM_LCD_ROWS, 0x00);
+
+	char clockHour = RTCHOUR, clockMin = RTCMIN, clockSec = RTCSEC;
+
+	if (!running) {
+		switch (pMsg->Options) {
+		case COUNTDOWN_START:
+			running = 1;
+			break;
 		case COUNTDOWN_DOWN:
-		  diff--;
-		  break;
+			diff--;
+			break;
 		case COUNTDOWN_UP:
-		  diff++;
-		  break;
-	  }
-	  toMin = clockMin + diff;
-	  toHour = clockHour + toMin / 60;
-	  toMin = toMin % 60;
-	  toSec = clockSec;
-  }else{
-	switch (pMsg->Options) {
-	  case COUNTDOWN_START:
-		running = 0;
+			diff++;
+			break;
+		default:
+			break;
+		}
 		toMin = clockMin + diff;
 		toHour = clockHour + toMin / 60;
 		toMin = toMin % 60;
 		toSec = clockSec;
-		break;
-	  case COUNTDOWN_DOWN:
-		toSec = clockSec;
-		toMin--;
-		break;
-	  case COUNTDOWN_UP:
-		toSec = clockSec;
-		break;
+	} else {
+		switch (pMsg->Options) {
+		case COUNTDOWN_START:
+			running = 0;
+			toMin = clockMin + diff;
+			toHour = clockHour + toMin / 60;
+			toMin = toMin % 60;
+			toSec = clockSec;
+			break;
+		case COUNTDOWN_DOWN:
+			toSec = clockSec;
+			toMin--;
+			break;
+		case COUNTDOWN_UP:
+			toSec = clockSec;
+			break;
+		default:
+			break;
+		}
 	}
-  }
-  int secs, mins;
-  secs = toSec - clockSec;
-  mins = toMin - clockMin;
-  if(secs < 0){
-	  mins--;
-	  secs = 60 + secs;
-  }
-  if(mins < 0){
-	  hour--;
-	  mins = 60 + mins;
-  }
-  if(mins == 0 && secs == 0){
-	  running = 0;
-  }
+	short secs, mins;
+	secs = toSec - clockSec;
+	mins = toMin - clockMin;
+	if (secs < 0) {
+		mins--;
+		secs = 60 + secs;
+	}
+	if (mins < 0) {
+		mins = 60 + mins;
+	}
+	if (pMsg->Options == COUNTDOWN_TICK) {
+		if (mins == 0) {
+			if (secs == 0) {
+				vibrateCountdown(200, 200, 5);
+			} else if (secs <= 10) {
+				vibrateCountdown(200, 200, 2);
+			}else if(secs % 10 == 0){
+				vibrateCountdown(200, 200, 2);
+			}
+		} else if (secs == 0) {
+			vibrateCountdown(128,255,(mins <= 5 ? mins : 5));
+		}
+	}
+	if (running) {
+		if (mins <= 0 && secs <= 0) {
+			running = 0;
+		}
+	}
 
-  DrawCenteredMinSec(mins, secs, 32);
-  //CopyRowsIntoMyBuffer(pBarCodeImage,STARTING_ROW,NUM_LCD_ROWS);
+	DrawCenteredMinSec(mins, secs, 32);
+	//CopyRowsIntoMyBuffer(pBarCodeImage,STARTING_ROW,NUM_LCD_ROWS);
 
-  /* display entire buffer */
-  SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
+	/* display entire buffer */
+	SendMyBufferToLcd(STARTING_ROW, NUM_LCD_ROWS);
 
-  CurrentIdlePage = CountDownPage;
-  ConfigureIdleUserInterfaceButtons();
-
-}
-
-static void ListPairedDevicesHandler(void)
-{
-  StopDisplayTimer();
-  
-  /* draw entire region */
-  FillMyBuffer(STARTING_ROW,NUM_LCD_ROWS,0x00);
-
-  tString pBluetoothAddress[12+1];
-  tString pBluetoothName[12+1];
-
-  gRow = 4;
-  gColumn = 0;
-  SetFont(MetaWatch7);
-
-  unsigned char i;
-  for( i = 0; i < 3; i++)
-  {
-
-    unsigned char j;
-    pBluetoothName[0] = 'D';
-    pBluetoothName[1] = 'e';
-    pBluetoothName[2] = 'v';
-    pBluetoothName[3] = 'i';
-    pBluetoothName[4] = 'c';
-    pBluetoothName[5] = 'e';
-    pBluetoothName[6] = ' ';
-    pBluetoothName[7] = 'N';
-    pBluetoothName[8] = 'a';
-    pBluetoothName[9] = 'm';
-    pBluetoothName[10] = 'e';
-    pBluetoothName[11] = '1' + i;
-
-    for(j = 0; j < sizeof(pBluetoothAddress); j++)
-    {
-      pBluetoothAddress[j] = '0';
-    }
-
-    QueryLinkKeys(i,pBluetoothAddress,pBluetoothName,12);
-
-    gColumn = 0;
-    gBitColumnMask = BIT4;
-    WriteFontString(pBluetoothName);
-    gRow += 12;
-
-    gColumn = 0;
-    gBitColumnMask = BIT4;
-    WriteFontString(pBluetoothAddress);
-    gRow += 12+5;
-
-  }
-
-  SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
-
-  CurrentIdlePage = ListPairedDevicesPage;
-  ConfigureIdleUserInterfaceButtons();
+	CurrentIdlePage = CountDownPage;
+	ConfigureIdleUserInterfaceButtons();
 
 }
 
+static void ListPairedDevicesHandler(void) {
+	StopDisplayTimer();
 
-static void DrawConnectionScreen()
-{
+	/* draw entire region */
+	FillMyBuffer(STARTING_ROW, NUM_LCD_ROWS, 0x00);
 
-  /* this is part of the idle update
-   * timing is controlled by the idle update timer
-   * buffer was already cleared when drawing the time
-   */
+	tString pBluetoothAddress[12 + 1];
+	tString pBluetoothName[12 + 1];
 
-  unsigned char const* pSwash;
+	gRow = 4;
+	gColumn = 0;
+	SetFont(MetaWatch7);
 
-  switch (CurrentIdlePage)
-  {
-  case RadioOnWithPairingInfoPage:
-    pSwash = pBootPageConnectionSwash;
-    break;
-  case RadioOnWithoutPairingInfoPage:
-    pSwash = pBootPagePairingSwash;
-    break;
-  case BluetoothOffPage:
-    pSwash = pBootPageBluetoothOffSwash;
-    break;
-  default:
-    pSwash = pBootPageUnknownSwash;
-    break;
+	unsigned char i;
+	for (i = 0; i < 3; i++) {
 
-  }
+		unsigned char j;
+		pBluetoothName[0] = 'D';
+		pBluetoothName[1] = 'e';
+		pBluetoothName[2] = 'v';
+		pBluetoothName[3] = 'i';
+		pBluetoothName[4] = 'c';
+		pBluetoothName[5] = 'e';
+		pBluetoothName[6] = ' ';
+		pBluetoothName[7] = 'N';
+		pBluetoothName[8] = 'a';
+		pBluetoothName[9] = 'm';
+		pBluetoothName[10] = 'e';
+		pBluetoothName[11] = '1' + i;
 
-  CopyRowsIntoMyBuffer(pSwash,WATCH_DRAWN_IDLE_BUFFER_ROWS+1,32);
+		for (j = 0; j < sizeof(pBluetoothAddress); j++) {
+			pBluetoothAddress[j] = '0';
+		}
 
-  /* local bluetooth address */
-  gRow = 65;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
-  SetFont(MetaWatch7);
-  WriteFontString(GetLocalBluetoothAddressString());
+		QueryLinkKeys(i, pBluetoothAddress, pBluetoothName, 12);
 
-  /* add the firmware version */
-  gRow = 75;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
-  DrawVersionInfo(10);
+		gColumn = 0;
+		gBitColumnMask = BIT4;
+		WriteFontString(pBluetoothName);
+		gRow += 12;
+
+		gColumn = 0;
+		gBitColumnMask = BIT4;
+		WriteFontString(pBluetoothAddress);
+		gRow += 12 + 5;
+
+	}
+
+	SendMyBufferToLcd(STARTING_ROW, NUM_LCD_ROWS);
+
+	CurrentIdlePage = ListPairedDevicesPage;
+	ConfigureIdleUserInterfaceButtons();
+
+}
+
+static void DrawConnectionScreen() {
+
+	/* this is part of the idle update
+	 * timing is controlled by the idle update timer
+	 * buffer was already cleared when drawing the time
+	 */
+
+	unsigned char const* pSwash;
+
+	switch (CurrentIdlePage) {
+	case RadioOnWithPairingInfoPage:
+		pSwash = pBootPageConnectionSwash;
+		break;
+	case RadioOnWithoutPairingInfoPage:
+		pSwash = pBootPagePairingSwash;
+		break;
+	case BluetoothOffPage:
+		pSwash = pBootPageBluetoothOffSwash;
+		break;
+	default:
+		pSwash = pBootPageUnknownSwash;
+		break;
+
+	}
+
+	CopyRowsIntoMyBuffer(pSwash, WATCH_DRAWN_IDLE_BUFFER_ROWS + 1, 32);
+
+	/* local bluetooth address */
+	gRow = 65;
+	gColumn = 0;
+	gBitColumnMask = BIT4;
+	SetFont(MetaWatch7);
+	WriteFontString(GetLocalBluetoothAddressString());
+
+	/* add the firmware version */
+	gRow = 75;
+	gColumn = 0;
+	gBitColumnMask = BIT4;
+	DrawVersionInfo(10);
 }
 
 /* change the parameter but don't save it into flash */
-static void ConfigureDisplayHandler(tMessage* pMsg)
-{
-  switch (pMsg->Options)
-  {
-  case CONFIGURE_DISPLAY_OPTION_DONT_DISPLAY_SECONDS:
-    nvDisplaySeconds = 0x00;
-    break;
-  case CONFIGURE_DISPLAY_OPTION_DISPLAY_SECONDS:
-    nvDisplaySeconds = 0x01;
-    break;
-  case CONFIGURE_DISPLAY_OPTION_DONT_INVERT_DISPLAY:
-    nvIdleBufferInvert = 0x00;
-    break;
-  case CONFIGURE_DISPLAY_OPTION_INVERT_DISPLAY:
-    nvIdleBufferInvert = 0x01;
-    break;
-  }
+static void ConfigureDisplayHandler(tMessage* pMsg) {
+	switch (pMsg->Options) {
+	case CONFIGURE_DISPLAY_OPTION_DONT_DISPLAY_SECONDS:
+		nvDisplaySeconds = 0x00;
+		break;
+	case CONFIGURE_DISPLAY_OPTION_DISPLAY_SECONDS:
+		nvDisplaySeconds = 0x01;
+		break;
+	case CONFIGURE_DISPLAY_OPTION_DONT_INVERT_DISPLAY:
+		nvIdleBufferInvert = 0x00;
+		break;
+	case CONFIGURE_DISPLAY_OPTION_INVERT_DISPLAY:
+		nvIdleBufferInvert = 0x01;
+		break;
+	}
 }
 
-static void ConfigureIdleBufferSizeHandler(tMessage* pMsg)
-{
-  nvIdleBufferConfig = pMsg->pBuffer[0] & IDLE_BUFFER_CONFIG_MASK;
-  if ( nvIdleBufferConfig == WATCH_CONTROLS_TOP ) IdleUpdateHandler();
+static void ConfigureIdleBufferSizeHandler(tMessage* pMsg) {
+	nvIdleBufferConfig = pMsg->pBuffer[0] & IDLE_BUFFER_CONFIG_MASK;
+	if (nvIdleBufferConfig == WATCH_CONTROLS_TOP)
+		IdleUpdateHandler();
 }
 
-static void ModifyTimeHandler(tMessage* pMsg)
-{
-  int time;
-  switch (pMsg->Options)
-  {
-  case MODIFY_TIME_INCREMENT_HOUR:
-    /*! todo - make these functions */
-    time = RTCHOUR;
-    time++; if ( time == 24 ) time = 0;
-    RTCHOUR = time;
-    break;
-  case MODIFY_TIME_INCREMENT_MINUTE:
-    time = RTCMIN;
-    time++; if ( time == 60 ) time = 0;
-    RTCMIN = time;
-    break;
-  case MODIFY_TIME_INCREMENT_DOW:
-    /* modify the day of the week (not the day of the month) */
-    time = RTCDOW;
-    time++; if ( time == 7 ) time = 0;
-    RTCDOW = time;
-    break;
-  }
+static void ModifyTimeHandler(tMessage* pMsg) {
+	int time;
+	switch (pMsg->Options) {
+	case MODIFY_TIME_INCREMENT_HOUR:
+		/*! todo - make these functions */
+		time = RTCHOUR;
+		time++;
+		if (time == 24)
+			time = 0;
+		RTCHOUR = time;
+		break;
+	case MODIFY_TIME_INCREMENT_MINUTE:
+		time = RTCMIN;
+		time++;
+		if (time == 60)
+			time = 0;
+		RTCMIN = time;
+		break;
+	case MODIFY_TIME_INCREMENT_DOW:
+		/* modify the day of the week (not the day of the month) */
+		time = RTCDOW;
+		time++;
+		if (time == 7)
+			time = 0;
+		RTCDOW = time;
+		break;
+	}
 
-  /* now redraw the screen */
-  IdleUpdateHandler();
-
-}
-
-unsigned char GetIdleBufferConfiguration(void)
-{
-  return nvIdleBufferConfig;
-}
-
-static void InitMyBuffer(void)
-{
-  int row;
-  int col;
-
-  // Clear the display buffer.  Step through the rows
-  for(row = STARTING_ROW; row < NUM_LCD_ROWS; row++)
-  {
-    // clear a horizontal line
-    for(col = 0; col < NUM_LCD_COL_BYTES; col++)
-    {
-      pMyBuffer[row].Row = row+FIRST_LCD_LINE_OFFSET;
-      pMyBuffer[row].Data[col] = 0x00;
-      pMyBuffer[row].Dummy = 0x00;
-
-    }
-  }
-}
-
-
-static void FillMyBuffer(unsigned char StartingRow,
-                         unsigned char NumberOfRows,
-                         unsigned char FillValue)
-{
-  int row = StartingRow;
-  int col;
-
-  // Clear the display buffer.  Step through the rows
-  for( ; row < NUM_LCD_ROWS && row < StartingRow+NumberOfRows; row++ )
-  {
-    // clear a horizontal line
-    for(col = 0; col < NUM_LCD_COL_BYTES; col++)
-    {
-      pMyBuffer[row].Data[col] = FillValue;
-    }
-  }
+	/* now redraw the screen */
+	IdleUpdateHandler();
 
 }
 
-static void SendMyBufferToLcd(unsigned char StartingRow, unsigned char NumberOfRows)
-{
-  int row = StartingRow;
-  int col;
-
-  /*
-   * flip the bits before sending to LCD task because it will
-   * dma this portion of the screen
-  */
-  if ( QueryInvertDisplay() == NORMAL_DISPLAY )
-  {
-    for( ; row < NUM_LCD_ROWS && row < StartingRow+NumberOfRows; row++)
-    {
-      for(col = 0; col < NUM_LCD_COL_BYTES; col++)
-      {
-        pMyBuffer[row].Data[col] = ~(pMyBuffer[row].Data[col]);
-      }
-    }
-  }
-  tLcdLine *pStartLcdLine = &pMyBuffer[StartingRow];
-  UpdateMyDisplay((unsigned char*)pStartLcdLine, NumberOfRows);
+unsigned char GetIdleBufferConfiguration(void) {
+	return nvIdleBufferConfig;
 }
 
+static void InitMyBuffer(void) {
+	int row;
+	int col;
 
+	// Clear the display buffer.  Step through the rows
+	for (row = STARTING_ROW; row < NUM_LCD_ROWS; row++) {
+		// clear a horizontal line
+		for (col = 0; col < NUM_LCD_COL_BYTES; col++) {
+			pMyBuffer[row].Row = row + FIRST_LCD_LINE_OFFSET;
+			pMyBuffer[row].Data[col] = 0x00;
+			pMyBuffer[row].Dummy = 0x00;
+
+		}
+	}
+}
+
+static void FillMyBuffer(unsigned char StartingRow, unsigned char NumberOfRows,
+		unsigned char FillValue) {
+	int row = StartingRow;
+	int col;
+
+	// Clear the display buffer.  Step through the rows
+	for (; row < NUM_LCD_ROWS && row < StartingRow + NumberOfRows; row++) {
+		// clear a horizontal line
+		for (col = 0; col < NUM_LCD_COL_BYTES; col++) {
+			pMyBuffer[row].Data[col] = FillValue;
+		}
+	}
+
+}
+
+static void SendMyBufferToLcd(unsigned char StartingRow,
+		unsigned char NumberOfRows) {
+	int row = StartingRow;
+	int col;
+
+	/*
+	 * flip the bits before sending to LCD task because it will
+	 * dma this portion of the screen
+	 */
+	if (QueryInvertDisplay() == NORMAL_DISPLAY) {
+		for (; row < NUM_LCD_ROWS && row < StartingRow + NumberOfRows; row++) {
+			for (col = 0; col < NUM_LCD_COL_BYTES; col++) {
+				pMyBuffer[row].Data[col] = ~(pMyBuffer[row].Data[col]);
+			}
+		}
+	}
+	tLcdLine *pStartLcdLine = &pMyBuffer[StartingRow];
+	UpdateMyDisplay((unsigned char*) pStartLcdLine, NumberOfRows);
+}
 
 static void CopyRowsIntoMyBuffer(unsigned char const* pImage,
-                                 unsigned char StartingRow,
-                                 unsigned char NumberOfRows)
-{
+		unsigned char StartingRow, unsigned char NumberOfRows) {
 
-  unsigned char DestRow = StartingRow;
-  unsigned char SourceRow = 0;
-  unsigned char col = 0;
+	unsigned char DestRow = StartingRow;
+	unsigned char SourceRow = 0;
+	unsigned char col = 0;
 
-  while ( DestRow < NUM_LCD_ROWS && SourceRow < NumberOfRows )
-  {
-    for(col = 0; col < NUM_LCD_COL_BYTES; col++)
-    {
-      pMyBuffer[DestRow].Data[col] = pImage[SourceRow*NUM_LCD_COL_BYTES+col];
-    }
+	while (DestRow < NUM_LCD_ROWS && SourceRow < NumberOfRows) {
+		for (col = 0; col < NUM_LCD_COL_BYTES; col++) {
+			pMyBuffer[DestRow].Data[col] = pImage[SourceRow * NUM_LCD_COL_BYTES
+					+ col];
+		}
 
-    DestRow++;
-    SourceRow++;
+		DestRow++;
+		SourceRow++;
 
-  }
+	}
 
 }
 
 static void CopyColumnsIntoMyBuffer(unsigned char const* pImage,
-                                    unsigned char StartingRow,
-                                    unsigned char NumberOfRows,
-                                    unsigned char StartingColumn,
-                                    unsigned char NumberOfColumns)
-{
-  unsigned char DestRow = StartingRow;
-  unsigned char RowCounter = 0;
-  unsigned char DestColumn = StartingColumn;
-  unsigned char ColumnCounter = 0;
-  unsigned int SourceIndex = 0;
+		unsigned char StartingRow, unsigned char NumberOfRows,
+		unsigned char StartingColumn, unsigned char NumberOfColumns) {
+	unsigned char DestRow = StartingRow;
+	unsigned char RowCounter = 0;
+	unsigned char DestColumn = StartingColumn;
+	unsigned char ColumnCounter = 0;
+	unsigned int SourceIndex = 0;
 
-  /* copy rows into display buffer */
-  while ( DestRow < NUM_LCD_ROWS && RowCounter < NumberOfRows )
-  {
-    DestColumn = StartingColumn;
-    ColumnCounter = 0;
-    while ( DestColumn < NUM_LCD_COL_BYTES && ColumnCounter < NumberOfColumns )
-    {
-      pMyBuffer[DestRow].Data[DestColumn] = pImage[SourceIndex];
+	/* copy rows into display buffer */
+	while (DestRow < NUM_LCD_ROWS && RowCounter < NumberOfRows) {
+		DestColumn = StartingColumn;
+		ColumnCounter = 0;
+		while (DestColumn < NUM_LCD_COL_BYTES && ColumnCounter < NumberOfColumns) {
+			pMyBuffer[DestRow].Data[DestColumn] = pImage[SourceIndex];
 
-      DestColumn++;
-      ColumnCounter++;
-      SourceIndex++;
-    }
+			DestColumn++;
+			ColumnCounter++;
+			SourceIndex++;
+		}
 
-    DestRow++;
-    RowCounter++;
-  }
+		DestRow++;
+		RowCounter++;
+	}
 
 }
 
-static void DrawCenteredMinSec(int Minutes, int Seconds, unsigned int y)
-{
-  unsigned char msd;
-  unsigned char lsd;
+static void DrawCenteredMinSec(int Minutes, int Seconds, unsigned int y) {
+	unsigned char msd;
+	unsigned char lsd;
 
+	gRow = 6 + y;
+	gColumn = 24 / 8;
+	gBitColumnMask = BIT0;
+	SetFont(MetaWatchTime);
 
-  gRow = 6 + y;
-  gColumn = 24/8;
-  gBitColumnMask = BIT0;
-  SetFont(MetaWatchTime);
+	/* display minutes */
+	//int Minutes = RTCMIN;
+	msd = Minutes / 10;
+	lsd = Minutes % 10;
+	WriteFontCharacter(msd);
+	WriteFontCharacter(lsd);
 
+	//int Seconds = RTCSEC;
+	msd = Seconds / 10;
+	lsd = Seconds % 10;
 
-  /* display minutes */
-  //int Minutes = RTCMIN;
-  msd = Minutes / 10;
-  lsd = Minutes % 10;
-  WriteFontCharacter(msd);
-  WriteFontCharacter(lsd);
-
-  //int Seconds = RTCSEC;
-  msd = Seconds / 10;
-  lsd = Seconds % 10;
-
-  WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
-  WriteFontCharacter(msd);
-  WriteFontCharacter(lsd);
+	WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
+	WriteFontCharacter(msd);
+	WriteFontCharacter(lsd);
 
 }
 
-static void DrawDateTime(unsigned char OnceConnected)
-{
-  unsigned char msd;
-  unsigned char lsd;
+static void DrawDateTime(unsigned char OnceConnected) {
+	unsigned char msd;
+	unsigned char lsd;
 
-  /* display hour */
-  int Hour = RTCHOUR;
+	/* display hour */
+	int Hour = RTCHOUR;
 
-  /* if required convert to twelve hour format */
-  if ( GetTimeFormat() == TWELVE_HOUR )
-  {
-    Hour %= 12;
-    if (Hour == 0) Hour = 12;
-  }
-  
-  msd = Hour / 10;
-  lsd = Hour % 10;
+	/* if required convert to twelve hour format */
+	if (GetTimeFormat() == TWELVE_HOUR) {
+		Hour %= 12;
+		if (Hour == 0)
+			Hour = 12;
+	}
 
-  gRow = 6;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
-  SetFont(MetaWatchTime);
+	msd = Hour / 10;
+	lsd = Hour % 10;
 
-  /* if first digit is zero then leave location blank */
-  if ( msd == 0 && GetTimeFormat() == TWELVE_HOUR )
-  {
-    WriteFontCharacter(TIME_CHARACTER_SPACE_INDEX);
-  }
-  else
-  {
-    WriteFontCharacter(msd);
-  }
+	gRow = 6;
+	gColumn = 0;
+	gBitColumnMask = BIT4;
+	SetFont(MetaWatchTime);
 
-  WriteFontCharacter(lsd);
+	/* if first digit is zero then leave location blank */
+	if (msd == 0 && GetTimeFormat() == TWELVE_HOUR) {
+		WriteFontCharacter(TIME_CHARACTER_SPACE_INDEX);
+	} else {
+		WriteFontCharacter(msd);
+	}
 
-  WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
+	WriteFontCharacter(lsd);
 
-  /* display minutes */
-  int Minutes = RTCMIN;
-  msd = Minutes / 10;
-  lsd = Minutes % 10;
-  WriteFontCharacter(msd);
-  WriteFontCharacter(lsd);
+	WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
 
-  if ( nvDisplaySeconds )
-  {
-    int Seconds = RTCSEC;
-    msd = Seconds / 10;
-    lsd = Seconds % 10;
+	/* display minutes */
+	int Minutes = RTCMIN;
+	msd = Minutes / 10;
+	lsd = Minutes % 10;
+	WriteFontCharacter(msd);
+	WriteFontCharacter(lsd);
 
-    WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
-    WriteFontCharacter(msd);
-    WriteFontCharacter(lsd);
+	if (nvDisplaySeconds) {
+		int Seconds = RTCSEC;
+		msd = Seconds / 10;
+		lsd = Seconds % 10;
 
-  }
-  else if (OnceConnected) /* now things starting getting fun....*/
-  {
-    if ( GetTimeFormat() == TWELVE_HOUR ) DisplayAmPm();
-    if ( QueryBluetoothOn() == 0 )
-    {
-      CopyColumnsIntoMyBuffer(pBluetoothOffIdlePageIcon,
-                              IDLE_PAGE_ICON_STARTING_ROW,
-                              IDLE_PAGE_ICON_SIZE_IN_ROWS,
-                              IDLE_PAGE_ICON_STARTING_COL,
-                              IDLE_PAGE_ICON_SIZE_IN_COLS);
-    }
-    else if ( QueryPhoneConnected() == 0 )
-    {
-      CopyColumnsIntoMyBuffer(pPhoneDisconnectedIdlePageIcon,
-                              IDLE_PAGE_ICON_STARTING_ROW,
-                              IDLE_PAGE_ICON_SIZE_IN_ROWS,
-                              IDLE_PAGE_ICON_STARTING_COL,
-                              IDLE_PAGE_ICON_SIZE_IN_COLS);
-    }
-    else
-    {
-      if ( QueryBatteryCharging() )
-      {
-        CopyColumnsIntoMyBuffer(pBatteryChargingIdlePageIconType2,
-                                IDLE_PAGE_ICON2_STARTING_ROW,
-                                IDLE_PAGE_ICON2_SIZE_IN_ROWS,
-                                IDLE_PAGE_ICON2_STARTING_COL,
-                                IDLE_PAGE_ICON2_SIZE_IN_COLS);
-      }
-      else
-      {
-        unsigned int bV = ReadBatterySenseAverage();
+		WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
+		WriteFontCharacter(msd);
+		WriteFontCharacter(lsd);
 
-        if ( bV < 3500 )
-        {
-          CopyColumnsIntoMyBuffer(pLowBatteryIdlePageIconType2,
-                                  IDLE_PAGE_ICON2_STARTING_ROW,
-                                  IDLE_PAGE_ICON2_SIZE_IN_ROWS,
-                                  IDLE_PAGE_ICON2_STARTING_COL,
-                                  IDLE_PAGE_ICON2_SIZE_IN_COLS);
-        }
-        else
-        {
-          DisplayDayOfWeek();
-          DisplayDate();
-        }
-      }
-    }
-  }
-  else
-  {
-    if ( GetTimeFormat() == TWELVE_HOUR ) DisplayAmPm();
-    DisplayDayOfWeek();
-    DisplayDate();
-  }
+	} else if (OnceConnected) /* now things starting getting fun....*/
+	{
+		if (GetTimeFormat() == TWELVE_HOUR)
+			DisplayAmPm();
+		if (QueryBluetoothOn() == 0) {
+			CopyColumnsIntoMyBuffer(pBluetoothOffIdlePageIcon,
+					IDLE_PAGE_ICON_STARTING_ROW, IDLE_PAGE_ICON_SIZE_IN_ROWS,
+					IDLE_PAGE_ICON_STARTING_COL, IDLE_PAGE_ICON_SIZE_IN_COLS);
+		} else if (QueryPhoneConnected() == 0) {
+			CopyColumnsIntoMyBuffer(pPhoneDisconnectedIdlePageIcon,
+					IDLE_PAGE_ICON_STARTING_ROW, IDLE_PAGE_ICON_SIZE_IN_ROWS,
+					IDLE_PAGE_ICON_STARTING_COL, IDLE_PAGE_ICON_SIZE_IN_COLS);
+		} else {
+			if (QueryBatteryCharging()) {
+				CopyColumnsIntoMyBuffer(pBatteryChargingIdlePageIconType2,
+						IDLE_PAGE_ICON2_STARTING_ROW,
+						IDLE_PAGE_ICON2_SIZE_IN_ROWS,
+						IDLE_PAGE_ICON2_STARTING_COL,
+						IDLE_PAGE_ICON2_SIZE_IN_COLS);
+			} else {
+				unsigned int bV = ReadBatterySenseAverage();
+
+				if (bV < 3500) {
+					CopyColumnsIntoMyBuffer(pLowBatteryIdlePageIconType2,
+							IDLE_PAGE_ICON2_STARTING_ROW,
+							IDLE_PAGE_ICON2_SIZE_IN_ROWS,
+							IDLE_PAGE_ICON2_STARTING_COL,
+							IDLE_PAGE_ICON2_SIZE_IN_COLS);
+				} else {
+					DisplayDayOfWeek();
+					DisplayDate();
+				}
+			}
+		}
+	} else {
+		if (GetTimeFormat() == TWELVE_HOUR)
+			DisplayAmPm();
+		DisplayDayOfWeek();
+		DisplayDate();
+	}
 }
 
-static void MenuModeHandler(unsigned char MsgOptions)
-{
-  StopDisplayTimer();
+static void MenuModeHandler(unsigned char MsgOptions) {
+	StopDisplayTimer();
 
-  /* draw entire region */
-  FillMyBuffer(STARTING_ROW,PHONE_IDLE_BUFFER_ROWS,0x00);
+	/* draw entire region */
+	FillMyBuffer(STARTING_ROW, PHONE_IDLE_BUFFER_ROWS, 0x00);
 
-  switch (MsgOptions)
-  {
+	switch (MsgOptions) {
 
-  case MENU_MODE_OPTION_PAGE1:
-    DrawMenu1();
-    CurrentIdlePage = Menu1Page;
-    ConfigureIdleUserInterfaceButtons();
-    break;
+	case MENU_MODE_OPTION_PAGE1:
+		DrawMenu1();
+		CurrentIdlePage = Menu1Page;
+		ConfigureIdleUserInterfaceButtons();
+		break;
 
-  case MENU_MODE_OPTION_PAGE2:
-    DrawMenu2();
-    CurrentIdlePage = Menu2Page;
-    ConfigureIdleUserInterfaceButtons();
-    break;
+	case MENU_MODE_OPTION_PAGE2:
+		DrawMenu2();
+		CurrentIdlePage = Menu2Page;
+		ConfigureIdleUserInterfaceButtons();
+		break;
 
-  case MENU_MODE_OPTION_PAGE3:
-    DrawMenu3();
-    CurrentIdlePage = Menu3Page;
-    ConfigureIdleUserInterfaceButtons();
-    break;
+	case MENU_MODE_OPTION_PAGE3:
+		DrawMenu3();
+		CurrentIdlePage = Menu3Page;
+		ConfigureIdleUserInterfaceButtons();
+		break;
 
-  case MENU_MODE_OPTION_UPDATE_CURRENT_PAGE:
+	case MENU_MODE_OPTION_UPDATE_CURRENT_PAGE:
 
-  default:
-    switch ( CurrentIdlePage )
-    {
-    case Menu1Page:
-      DrawMenu1();
-      break;
-    case Menu2Page:
-      DrawMenu2();
-      break;
-    case Menu3Page:
-      DrawMenu3();
-      break;
-    default:
-      PrintString("Menu Mode Screen Selection Error\r\n");
-      break;
-    }
-    break;
-  }
+	default:
+		switch (CurrentIdlePage) {
+		case Menu1Page:
+			DrawMenu1();
+			break;
+		case Menu2Page:
+			DrawMenu2();
+			break;
+		case Menu3Page:
+			DrawMenu3();
+			break;
+		default:
+			PrintString("Menu Mode Screen Selection Error\r\n");
+			break;
+		}
+		break;
+	}
 
-  /* these icons are common to all menus */
-  DrawCommonMenuIcons();
+	/* these icons are common to all menus */
+	DrawCommonMenuIcons();
 
-  /* only invert the part that was just drawn */
-  SendMyBufferToLcd(STARTING_ROW,NUM_LCD_ROWS);
+	/* only invert the part that was just drawn */
+	SendMyBufferToLcd(STARTING_ROW, NUM_LCD_ROWS);
 }
 
-static void DrawMenu1(void)
-{
-  unsigned char const * pIcon;
+static void DrawMenu1(void) {
+	unsigned char const * pIcon;
 
-  if ( QueryConnectionState() == Initializing )
-  {
-    pIcon = pPairableInitIcon;
-  }
-  else if ( QueryDiscoverable() )
-  {
-    pIcon = pPairableIcon;
-  }
-  else
-  {
-    pIcon = pUnpairableIcon;
-  }
+	if (QueryConnectionState() == Initializing) {
+		pIcon = pPairableInitIcon;
+	} else if (QueryDiscoverable()) {
+		pIcon = pPairableIcon;
+	} else {
+		pIcon = pUnpairableIcon;
+	}
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_A_F_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_A_F_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
-  /***************************************************************************/
+	/***************************************************************************/
 
-  if ( QueryConnectionState() == Initializing )
-  {
-    pIcon = pBluetoothInitIcon;
-  }
-  else if ( QueryBluetoothOn() )
-  {
-    pIcon = pBluetoothOnIcon;
-  }
-  else
-  {
-    pIcon = pBluetoothOffIcon;
-  }
+	if (QueryConnectionState() == Initializing) {
+		pIcon = pBluetoothInitIcon;
+	} else if (QueryBluetoothOn()) {
+		pIcon = pBluetoothOnIcon;
+	} else {
+		pIcon = pBluetoothOffIcon;
+	}
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_A_F_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          RIGHT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_A_F_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, RIGHT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
-  /***************************************************************************/
+	/***************************************************************************/
 
-  if ( QueryLinkAlarmEnable() )
-  {
-    pIcon = pLinkAlarmOnIcon;
-  }
-  else
-  {
-    pIcon = pLinkAlarmOffIcon;
-  }
+	if (QueryLinkAlarmEnable()) {
+		pIcon = pLinkAlarmOnIcon;
+	} else {
+		pIcon = pLinkAlarmOffIcon;
+	}
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_B_E_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_B_E_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 }
 
-static void DrawMenu2(void)
-{
-  /* top button is always soft reset */
-  CopyColumnsIntoMyBuffer(pResetButtonIcon,
-                          BUTTON_ICON_A_F_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+static void DrawMenu2(void) {
+	/* top button is always soft reset */
+	CopyColumnsIntoMyBuffer(pResetButtonIcon, BUTTON_ICON_A_F_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
-  unsigned char const * pIcon;
+	unsigned char const * pIcon;
 
-  if ( QueryRstPinEnabled() )
-  {
-    pIcon = pRstPinIcon;
-  }
-  else
-  {
-    pIcon = pNmiPinIcon;
-  }
+	if (QueryRstPinEnabled()) {
+		pIcon = pRstPinIcon;
+	} else {
+		pIcon = pNmiPinIcon;
+	}
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_A_F_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          RIGHT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_A_F_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, RIGHT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
-  /***************************************************************************/
+	/***************************************************************************/
 
-  if ( QueryConnectionState() == Initializing )
-  {
-    pIcon = pSspInitIcon;
-  }
-  else if ( QuerySecureSimplePairingEnabled() )
-  {
-    pIcon = pSspEnabledIcon;
-  }
-  else
-  {
-    pIcon = pSspDisabledIcon;
-  }
+	if (QueryConnectionState() == Initializing) {
+		pIcon = pSspInitIcon;
+	} else if (QuerySecureSimplePairingEnabled()) {
+		pIcon = pSspEnabledIcon;
+	} else {
+		pIcon = pSspDisabledIcon;
+	}
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_B_E_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_B_E_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
 }
 
-static void DrawMenu3(void)
-{
-  unsigned char const * pIcon;
+static void DrawMenu3(void) {
+	unsigned char const * pIcon;
 
-  pIcon = pNormalDisplayMenuIcon;
+	pIcon = pNormalDisplayMenuIcon;
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_A_F_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
-  /***************************************************************************/
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_A_F_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
+	/***************************************************************************/
 
 #if 0
-  /* shipping mode was removed for now */
-  CopyColumnsIntoMyBuffer(pShippingModeIcon,
-                          BUTTON_ICON_A_F_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          RIGHT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	/* shipping mode was removed for now */
+	CopyColumnsIntoMyBuffer(pShippingModeIcon,
+			BUTTON_ICON_A_F_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS,
+			RIGHT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 #endif
-  /***************************************************************************/
+	/***************************************************************************/
 
-  if ( nvDisplaySeconds )
-  {
-    pIcon = pSecondsOnMenuIcon;
-  }
-  else
-  {
-    pIcon = pSecondsOffMenuIcon;
-  }
+	if (nvDisplaySeconds) {
+		pIcon = pSecondsOnMenuIcon;
+	} else {
+		pIcon = pSecondsOffMenuIcon;
+	}
 
-  CopyColumnsIntoMyBuffer(pIcon,
-                          BUTTON_ICON_B_E_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pIcon, BUTTON_ICON_B_E_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
 }
 
-static void DrawCommonMenuIcons(void)
-{
-  CopyColumnsIntoMyBuffer(pNextIcon,
-                          BUTTON_ICON_B_E_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          RIGHT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+static void DrawCommonMenuIcons(void) {
+	CopyColumnsIntoMyBuffer(pNextIcon, BUTTON_ICON_B_E_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, RIGHT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
-  CopyColumnsIntoMyBuffer(pLedIcon,
-                          BUTTON_ICON_C_D_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          LEFT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pLedIcon, BUTTON_ICON_C_D_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, LEFT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 
-  CopyColumnsIntoMyBuffer(pExitIcon,
-                          BUTTON_ICON_C_D_ROW,
-                          BUTTON_ICON_SIZE_IN_ROWS,
-                          RIGHT_BUTTON_COLUMN,
-                          BUTTON_ICON_SIZE_IN_COLUMNS);
+	CopyColumnsIntoMyBuffer(pExitIcon, BUTTON_ICON_C_D_ROW,
+			BUTTON_ICON_SIZE_IN_ROWS, RIGHT_BUTTON_COLUMN,
+			BUTTON_ICON_SIZE_IN_COLUMNS);
 }
 
-static void MenuButtonHandler(unsigned char MsgOptions)
-{
-  StopDisplayTimer();
+static void MenuButtonHandler(unsigned char MsgOptions) {
+	StopDisplayTimer();
 
-  tMessage OutgoingMsg;
+	tMessage OutgoingMsg;
 
-  switch (MsgOptions)
-  {
-  case MENU_BUTTON_OPTION_TOGGLE_DISCOVERABILITY:
+	switch (MsgOptions) {
+	case MENU_BUTTON_OPTION_TOGGLE_DISCOVERABILITY:
 
-    if ( QueryConnectionState() != Initializing )
-    {
-      SetupMessage(&OutgoingMsg,PairingControlMsg,NO_MSG_OPTIONS);
+		if (QueryConnectionState() != Initializing) {
+			SetupMessage(&OutgoingMsg, PairingControlMsg, NO_MSG_OPTIONS);
 
-      if ( QueryDiscoverable() )
-      {
-        OutgoingMsg.Options = PAIRING_CONTROL_OPTION_DISABLE_PAIRING;
-      }
-      else
-      {
-        OutgoingMsg.Options = PAIRING_CONTROL_OPTION_ENABLE_PAIRING;
-      }
+			if (QueryDiscoverable()) {
+				OutgoingMsg.Options = PAIRING_CONTROL_OPTION_DISABLE_PAIRING;
+			} else {
+				OutgoingMsg.Options = PAIRING_CONTROL_OPTION_ENABLE_PAIRING;
+			}
 
-      RouteMsg(&OutgoingMsg);
-    }
-    /* screen will be updated with a message from spp */
-    break;
+			RouteMsg(&OutgoingMsg);
+		}
+		/* screen will be updated with a message from spp */
+		break;
 
-  case MENU_BUTTON_OPTION_TOGGLE_LINK_ALARM:
-    ToggleLinkAlarmEnable();
-    MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
-    break;
+	case MENU_BUTTON_OPTION_TOGGLE_LINK_ALARM:
+		ToggleLinkAlarmEnable();
+		MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
+		break;
 
-  case MENU_BUTTON_OPTION_EXIT:
+	case MENU_BUTTON_OPTION_EXIT:
 
-    /* save all of the non-volatile items */
-    SetupMessage(&OutgoingMsg,PairingControlMsg,PAIRING_CONTROL_OPTION_SAVE_SPP);
-    RouteMsg(&OutgoingMsg);
+		/* save all of the non-volatile items */
+		SetupMessage(&OutgoingMsg, PairingControlMsg,
+				PAIRING_CONTROL_OPTION_SAVE_SPP);
+		RouteMsg(&OutgoingMsg);
 
-    SaveLinkAlarmEnable();
-    SaveRstNmiConfiguration();
-    SaveIdleBufferInvert();
-    SaveDisplaySeconds();
+		SaveLinkAlarmEnable();
+		SaveRstNmiConfiguration();
+		SaveIdleBufferInvert();
+		SaveDisplaySeconds();
 
-    /* go back to the normal idle screen */
-    SetupMessage(&OutgoingMsg,IdleUpdate,NO_MSG_OPTIONS);
-    RouteMsg(&OutgoingMsg);
-    break;
+		/* go back to the normal idle screen */
+		SetupMessage(&OutgoingMsg, IdleUpdate, NO_MSG_OPTIONS);
+		RouteMsg(&OutgoingMsg);
+		break;
 
-  case MENU_BUTTON_OPTION_TOGGLE_BLUETOOTH:
+	case MENU_BUTTON_OPTION_TOGGLE_BLUETOOTH:
 
-    if ( QueryConnectionState() != Initializing )
-    {
-      if ( QueryBluetoothOn() )
-      {
-        SetupMessage(&OutgoingMsg,TurnRadioOffMsg,NO_MSG_OPTIONS);
-      }
-      else
-      {
-        SetupMessage(&OutgoingMsg,TurnRadioOnMsg,NO_MSG_OPTIONS);
-      }
+		if (QueryConnectionState() != Initializing) {
+			if (QueryBluetoothOn()) {
+				SetupMessage(&OutgoingMsg, TurnRadioOffMsg, NO_MSG_OPTIONS);
+			} else {
+				SetupMessage(&OutgoingMsg, TurnRadioOnMsg, NO_MSG_OPTIONS);
+			}
 
-      RouteMsg(&OutgoingMsg);
-    }
-    /* screen will be updated with a message from spp */
-    break;
+			RouteMsg(&OutgoingMsg);
+		}
+		/* screen will be updated with a message from spp */
+		break;
 
-  case MENU_BUTTON_OPTION_TOGGLE_SECURE_SIMPLE_PAIRING:
-    if ( QueryConnectionState() != Initializing )
-    {
-      SetupMessage(&OutgoingMsg,PairingControlMsg,PAIRING_CONTROL_OPTION_TOGGLE_SSP);
-      RouteMsg(&OutgoingMsg);
-    }
-    /* screen will be updated with a message from spp */
-    break;
+	case MENU_BUTTON_OPTION_TOGGLE_SECURE_SIMPLE_PAIRING:
+		if (QueryConnectionState() != Initializing) {
+			SetupMessage(&OutgoingMsg, PairingControlMsg,
+					PAIRING_CONTROL_OPTION_TOGGLE_SSP);
+			RouteMsg(&OutgoingMsg);
+		}
+		/* screen will be updated with a message from spp */
+		break;
 
-  case MENU_BUTTON_OPTION_TOGGLE_RST_NMI_PIN:
-    if ( QueryRstPinEnabled() )
-    {
-      DisableRstPin();
-    }
-    else
-    {
-      EnableRstPin();
-    }
-    MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
-    break;
+	case MENU_BUTTON_OPTION_TOGGLE_RST_NMI_PIN:
+		if (QueryRstPinEnabled()) {
+			DisableRstPin();
+		} else {
+			EnableRstPin();
+		}
+		MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
+		break;
 
-  case MENU_BUTTON_OPTION_DISPLAY_SECONDS:
-    ToggleSecondsHandler(TOGGLE_SECONDS_OPTIONS_DONT_UPDATE_IDLE);
-    MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
-    break;
+	case MENU_BUTTON_OPTION_DISPLAY_SECONDS:
+		ToggleSecondsHandler(TOGGLE_SECONDS_OPTIONS_DONT_UPDATE_IDLE);
+		MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
+		break;
 
-  case MENU_BUTTON_OPTION_INVERT_DISPLAY:
-    nvIdleBufferInvert = !nvIdleBufferInvert;
-    MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
-    break;
+	case MENU_BUTTON_OPTION_INVERT_DISPLAY:
+		nvIdleBufferInvert = !nvIdleBufferInvert;
+		MenuModeHandler(MENU_MODE_OPTION_UPDATE_CURRENT_PAGE);
+		break;
 
-  default:
-    break;
-  }
+	default:
+		break;
+	}
 
 }
 
-static void ToggleSecondsHandler(unsigned char Options)
-{
-  nvDisplaySeconds = !nvDisplaySeconds;
+static void ToggleSecondsHandler(unsigned char Options) {
+	nvDisplaySeconds = !nvDisplaySeconds;
 
-  if ( Options == TOGGLE_SECONDS_OPTIONS_UPDATE_IDLE )
-  {
-    IdleUpdateHandler();
-  }
+	if (Options == TOGGLE_SECONDS_OPTIONS_UPDATE_IDLE) {
+		IdleUpdateHandler();
+	}
 }
 
-static void DisplayAmPm(void)
-{
-  int Hour = RTCHOUR;
-  unsigned char const *pIcon = ( Hour >= 12 ) ? Pm : Am;
-  WriteIcon4w10h(pIcon,0,8);
+static void DisplayAmPm(void) {
+	int Hour = RTCHOUR;
+	unsigned char const *pIcon = (Hour >= 12) ? Pm : Am;
+	WriteIcon4w10h(pIcon, 0, 8);
 }
 
-static void DisplayDayOfWeek(void)
-{
-  /* row offset = 0 or 10 , column offset = 8 */
-  //WriteIcon4w10h(DaysOfWeek[RTCDOW], GetTimeFormat() == TWENTY_FOUR_HOUR ? 0 : 10, 8);
-  gRow = GetTimeFormat() == TWENTY_FOUR_HOUR ? 3 : 13;
-  gColumn = 8;
-  SetFont(MetaWatch7);
-  WriteFontString((tString *)DaysOfTheWeek[GetLanguage()][RTCDOW]);
+static void DisplayDayOfWeek(void) {
+	/* row offset = 0 or 10 , column offset = 8 */
+	//WriteIcon4w10h(DaysOfWeek[RTCDOW], GetTimeFormat() == TWENTY_FOUR_HOUR ? 0 : 10, 8);
+	gRow = GetTimeFormat() == TWENTY_FOUR_HOUR ? 3 : 13;
+	gColumn = 8;
+	SetFont(MetaWatch7);
+	WriteFontString((tString *) DaysOfTheWeek[GetLanguage()][RTCDOW]);
 }
 
-static void DisplayDate(void)
-{
-  if ( OnceConnected() )
-  {
-    int First;
-    int Second;
+static void DisplayDate(void) {
+	if (OnceConnected()) {
+		int First;
+		int Second;
 
-    /* determine if month or day is displayed first */
-    if ( GetDateFormat() == MONTH_FIRST )
-    {
-      First = RTCMON;
-      Second = RTCDAY;
-    }
-    else
-    {
-      First = RTCDAY;
-      Second = RTCMON;
-    }
+		/* determine if month or day is displayed first */
+		if (GetDateFormat() == MONTH_FIRST) {
+			First = RTCMON;
+			Second = RTCDAY;
+		} else {
+			First = RTCDAY;
+			Second = RTCMON;
+		}
 
-    /* make it line up with AM/PM and Day of Week */
-    gRow = 22;
-    gColumn = 8;
-    gBitColumnMask = BIT1;
-    SetFont(MetaWatch7);
+		/* make it line up with AM/PM and Day of Week */
+		gRow = 22;
+		gColumn = 8;
+		gBitColumnMask = BIT1;
+		SetFont(MetaWatch7);
 
-    /* add year when time is in 24 hour mode */
-    if ( GetTimeFormat() == TWENTY_FOUR_HOUR )
-    {
-      int year = RTCYEAR;
-      WriteFontCharacter(year/1000+'0');
-      year %= 1000;
-      WriteFontCharacter(year/100+'0');
-      year %= 100;
-      WriteFontCharacter(year/10+'0');
-      year %= 10;
-      WriteFontCharacter(year+'0');
-      gRow = 12;
-    }
+		/* add year when time is in 24 hour mode */
+		if (GetTimeFormat() == TWENTY_FOUR_HOUR) {
+			int year = RTCYEAR;
+			WriteFontCharacter(year / 1000 + '0');
+			year %= 1000;
+			WriteFontCharacter(year / 100 + '0');
+			year %= 100;
+			WriteFontCharacter(year / 10 + '0');
+			year %= 10;
+			WriteFontCharacter(year + '0');
+			gRow = 12;
+		}
 
-    gColumn = 8;
-    gBitColumnMask = BIT1;
-    WriteFontCharacter(First/10+'0');
-    WriteFontCharacter(First%10+'0');
-    WriteFontCharacter(GetDateFormat() == MONTH_FIRST ? '/' : '.');
-    WriteFontCharacter(Second/10+'0');
-    WriteFontCharacter(Second%10+'0');
+		gColumn = 8;
+		gBitColumnMask = BIT1;
+		WriteFontCharacter(First / 10 + '0');
+		WriteFontCharacter(First % 10 + '0');
+		WriteFontCharacter(GetDateFormat() == MONTH_FIRST ? '/' : '.');
+		WriteFontCharacter(Second / 10 + '0');
+		WriteFontCharacter(Second % 10 + '0');
 
-  }
+	}
 }
 
 /* these items are 4w by 10h */
-static void WriteIcon4w10h(unsigned char const * pIcon,
-                           unsigned char RowOffset,
-                           unsigned char ColumnOffset)
-{
+static void WriteIcon4w10h(unsigned char const * pIcon, unsigned char RowOffset,
+		unsigned char ColumnOffset) {
 
-  /* copy digit into correct position */
-  unsigned char RowNumber;
-  unsigned char Column;
+	/* copy digit into correct position */
+	unsigned char RowNumber;
+	unsigned char Column;
 
-  for ( Column = 0; Column < 4; Column++ )
-  {
-    for ( RowNumber = 0; RowNumber < 10; RowNumber++ )
-    {
-      pMyBuffer[RowNumber+RowOffset].Data[Column+ColumnOffset] =
-        pIcon[RowNumber+(Column*10)];
-    }
-  }
+	for (Column = 0; Column < 4; Column++) {
+		for (RowNumber = 0; RowNumber < 10; RowNumber++) {
+			pMyBuffer[RowNumber + RowOffset].Data[Column + ColumnOffset] =
+					pIcon[RowNumber + (Column * 10)];
+		}
+	}
 
 }
 
-unsigned char* GetTemplatePointer(unsigned char TemplateSelect)
-{
-  return NULL;
+unsigned char* GetTemplatePointer(unsigned char TemplateSelect) {
+	return NULL;
 }
 
+const unsigned char pBarCodeImage[NUM_LCD_ROWS * NUM_LCD_COL_BYTES] = { 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0xFC, 0xCF, 0xFF, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0xFC, 0xCF, 0xFF, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0xF0, 0xC0, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0xF0, 0xC0, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xCC, 0xCC, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xCC, 0xCC, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0x3C, 0xC0, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0x3C, 0xC0, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xFC, 0xCF, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xFC, 0xCF, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0x00, 0xCF, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0x00, 0xCF, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0xCC, 0xCC, 0xFF, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0xCC, 0xCC, 0xFF, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0xF0, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0xF0, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xC3, 0xCC, 0x3F, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xC3, 0xCC, 0x3F, 0xFC, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xF0, 0x33, 0x0C, 0xFF, 0x0C, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xF0, 0x33, 0x0C, 0xFF, 0x0C, 0x0C, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFC, 0xF0, 0xCF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFC, 0xF0, 0xCF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x30, 0xF3, 0x03, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x30, 0xF3, 0x03, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xF3, 0x0C, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xF3, 0x0C, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0xFC, 0xFF, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0xFC, 0xFF, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0x30, 0xCC, 0x30, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0x30, 0xCC, 0x30, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0xF0, 0x33, 0x3F, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0xF0, 0x33, 0x3F, 0x0F, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0x30, 0x30, 0xCC, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0x30, 0x30, 0xCC, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xCC, 0xCF, 0xC0, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xCC, 0xCF, 0xC0, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xFC, 0x33, 0xF3, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xCC, 0xCF, 0xFC, 0x33, 0xF3, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0x3C, 0xCF, 0xC3, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0C, 0xC0, 0x3C, 0xCF, 0xC3, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0x3C, 0x03, 0xF3, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFC, 0xFF, 0x3C, 0x03, 0xF3, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
 
-const unsigned char pBarCodeImage[NUM_LCD_ROWS*NUM_LCD_COL_BYTES] =
-{
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0xFC,0xCF,0xFF,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0xFC,0xCF,0xFF,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0xF0,0xC0,0x00,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0xF0,0xC0,0x00,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xCC,0xCC,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xCC,0xCC,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0x3C,0xC0,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0x3C,0xC0,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xFC,0xCF,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xFC,0xCF,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0x00,0xCF,0x00,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0x00,0xCF,0x00,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0xCC,0xCC,0xFF,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0xCC,0xCC,0xFF,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0xF0,0x0C,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0xF0,0x0C,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xC3,0xCC,0x3F,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xC3,0xCC,0x3F,0xFC,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xF0,0x33,0x0C,0xFF,0x0C,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xF0,0x33,0x0C,0xFF,0x0C,0x0C,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFC,0xF0,0xCF,0xF0,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFC,0xF0,0xCF,0xF0,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x30,0xF3,0x03,0x33,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x30,0xF3,0x03,0x33,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xF3,0x0C,0x00,0x03,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xF3,0x0C,0x00,0x03,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0xFC,0xFF,0x03,0x03,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0xFC,0xFF,0x03,0x03,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0x30,0xCC,0x30,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0x30,0xCC,0x30,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0xF0,0x33,0x3F,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0xF0,0x33,0x3F,0x0F,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0x30,0x30,0xCC,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0x30,0x30,0xCC,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xCC,0xCF,0xC0,0x03,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xCC,0xCF,0xC0,0x03,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xFC,0x33,0xF3,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xCC,0xCF,0xFC,0x33,0xF3,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0x3C,0xCF,0xC3,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0C,0xC0,0x3C,0xCF,0xC3,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0x3C,0x03,0xF3,0x03,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFC,0xFF,0x3C,0x03,0xF3,0x03,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
+const unsigned char pMetaWatchSplash[NUM_LCD_ROWS * NUM_LCD_COL_BYTES] = { 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x30, 0x60, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x30, 0x60, 0xC0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x70, 0x70, 0xC0, 0x01, 0xE0, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x70, 0xF0, 0x40, 0xE1, 0xFF, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0xD8, 0xD8, 0x60, 0x63, 0xE0, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0xD8, 0xD8, 0x60, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0xC8, 0x58, 0x34, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x8C, 0x0D, 0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0E, 0x8C, 0x0D, 0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xFE, 0x0F, 0x05, 0x1E, 0x1C, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x0E, 0x00, 0x07, 0x1C, 0x1C, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x07, 0x0C, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x02, 0x0C, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30,
+		0x18, 0xFC, 0xFC, 0x70, 0x04, 0x00, 0x31, 0xFC, 0xE1, 0x83, 0x40, 0x30,
+		0x18, 0xFC, 0xFC, 0x70, 0x04, 0x02, 0x31, 0x20, 0x18, 0x8C, 0x40, 0x70,
+		0x1C, 0x0C, 0x30, 0x70, 0x08, 0x82, 0x30, 0x20, 0x04, 0x88, 0x40, 0x78,
+		0x3C, 0x0C, 0x30, 0xD8, 0x08, 0x85, 0x48, 0x20, 0x04, 0x80, 0x40, 0xD8,
+		0x36, 0x0C, 0x30, 0xD8, 0x08, 0x85, 0x48, 0x20, 0x02, 0x80, 0x40, 0xD8,
+		0x36, 0xFC, 0x30, 0x8C, 0x91, 0x48, 0xCC, 0x20, 0x02, 0x80, 0x7F, 0xDC,
+		0x76, 0xFC, 0x30, 0x8C, 0x91, 0x48, 0x84, 0x20, 0x02, 0x80, 0x40, 0x8C,
+		0x63, 0x0C, 0x30, 0xFC, 0x91, 0x48, 0x84, 0x20, 0x02, 0x80, 0x40, 0x8C,
+		0x63, 0x0C, 0x30, 0xFE, 0xA3, 0x28, 0xFE, 0x21, 0x04, 0x80, 0x40, 0x86,
+		0xC3, 0x0C, 0x30, 0x06, 0xA3, 0x28, 0x02, 0x21, 0x04, 0x88, 0x40, 0x06,
+		0xC1, 0xFC, 0x30, 0x03, 0x46, 0x10, 0x01, 0x22, 0x18, 0x8C, 0x40, 0x06,
+		0xC1, 0xFC, 0x30, 0x03, 0x46, 0x10, 0x01, 0x22, 0xE0, 0x83, 0x40, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
 
-const unsigned char pMetaWatchSplash[NUM_LCD_ROWS*NUM_LCD_COL_BYTES] =
-{
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x30,0x60,0x80,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x30,0x60,0xC0,0x01,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x70,0x70,0xC0,0x01,0xE0,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x70,0xF0,0x40,0xE1,0xFF,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0xD8,0xD8,0x60,0x63,0xE0,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0xD8,0xD8,0x60,0x63,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0xC8,0x58,0x34,0x26,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x8C,0x0D,0x36,0x36,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0E,0x8C,0x0D,0x36,0x36,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0xFE,0x0F,0x05,0x1E,0x1C,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x0E,0x00,0x07,0x1C,0x1C,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x07,0x0C,0x18,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x02,0x0C,0x18,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x30,0x18,0xFC,0xFC,0x70,0x04,0x00,0x31,0xFC,0xE1,0x83,0x40,
-0x30,0x18,0xFC,0xFC,0x70,0x04,0x02,0x31,0x20,0x18,0x8C,0x40,
-0x70,0x1C,0x0C,0x30,0x70,0x08,0x82,0x30,0x20,0x04,0x88,0x40,
-0x78,0x3C,0x0C,0x30,0xD8,0x08,0x85,0x48,0x20,0x04,0x80,0x40,
-0xD8,0x36,0x0C,0x30,0xD8,0x08,0x85,0x48,0x20,0x02,0x80,0x40,
-0xD8,0x36,0xFC,0x30,0x8C,0x91,0x48,0xCC,0x20,0x02,0x80,0x7F,
-0xDC,0x76,0xFC,0x30,0x8C,0x91,0x48,0x84,0x20,0x02,0x80,0x40,
-0x8C,0x63,0x0C,0x30,0xFC,0x91,0x48,0x84,0x20,0x02,0x80,0x40,
-0x8C,0x63,0x0C,0x30,0xFE,0xA3,0x28,0xFE,0x21,0x04,0x80,0x40,
-0x86,0xC3,0x0C,0x30,0x06,0xA3,0x28,0x02,0x21,0x04,0x88,0x40,
-0x06,0xC1,0xFC,0x30,0x03,0x46,0x10,0x01,0x22,0x18,0x8C,0x40,
-0x06,0xC1,0xFC,0x30,0x03,0x46,0x10,0x01,0x22,0xE0,0x83,0x40,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
+const unsigned char Am[10 * 4] = { 0x00, 0x00, 0x9C, 0xA2, 0xA2, 0xA2, 0xBE,
+		0xA2, 0xA2, 0x00, 0x00, 0x00, 0x08, 0x0D, 0x0A, 0x08, 0x08, 0x08, 0x08,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
 
-
-
-const unsigned char Am[10*4] =
-{
-0x00,0x00,0x9C,0xA2,0xA2,0xA2,0xBE,0xA2,0xA2,0x00,
-0x00,0x00,0x08,0x0D,0x0A,0x08,0x08,0x08,0x08,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
-
-const unsigned char Pm[10*4] =
-{
-0x00,0x00,0x9E,0xA2,0xA2,0x9E,0x82,0x82,0x82,0x00,
-0x00,0x00,0x08,0x0D,0x0A,0x08,0x08,0x08,0x08,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
+const unsigned char Pm[10 * 4] = { 0x00, 0x00, 0x9E, 0xA2, 0xA2, 0x9E, 0x82,
+		0x82, 0x82, 0x00, 0x00, 0x00, 0x08, 0x0D, 0x0A, 0x08, 0x08, 0x08, 0x08,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
 /*
-const unsigned char DaysOfWeek[7][10*4] =
-{
-0x00,0x00,0x9C,0xA2,0x82,0x9C,0xA0,0xA2,0x1C,0x00,
-0x00,0x00,0x28,0x68,0xA8,0x28,0x28,0x28,0x27,0x00,
-0x00,0x00,0x02,0x02,0x02,0x03,0x02,0x02,0x02,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x22,0xB6,0xAA,0xA2,0xA2,0xA2,0x22,0x00,
-0x00,0x00,0x27,0x68,0xA8,0x28,0x28,0x28,0x27,0x00,
-0x00,0x00,0x02,0x02,0x02,0x03,0x02,0x02,0x02,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0xBE,0x88,0x88,0x88,0x88,0x88,0x08,0x00,
-0x00,0x00,0xE8,0x28,0x28,0xE8,0x28,0x28,0xE7,0x00,
-0x00,0x00,0x03,0x00,0x00,0x01,0x00,0x00,0x03,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0xA2,0xA2,0xAA,0xAA,0xAA,0xAA,0x94,0x00,
-0x00,0x00,0xEF,0x20,0x20,0x27,0x20,0x20,0xEF,0x00,
-0x00,0x00,0x01,0x02,0x02,0x02,0x02,0x02,0x01,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0xBE,0x88,0x88,0x88,0x88,0x88,0x88,0x00,
-0x00,0x00,0x28,0x28,0x28,0x2F,0x28,0x28,0xC8,0x00,
-0x00,0x00,0x7A,0x8A,0x8A,0x7A,0x4A,0x8A,0x89,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0xBE,0x82,0x82,0x9E,0x82,0x82,0x82,0x00,
-0x00,0x00,0xC7,0x88,0x88,0x87,0x84,0x88,0xC8,0x00,
-0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x1C,0xA2,0x82,0x9C,0xA0,0xA2,0x9C,0x00,
-0x00,0x00,0xE7,0x88,0x88,0x88,0x8F,0x88,0x88,0x00,
-0x00,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-};
-*/
+ const unsigned char DaysOfWeek[7][10*4] =
+ {
+ 0x00,0x00,0x9C,0xA2,0x82,0x9C,0xA0,0xA2,0x1C,0x00,
+ 0x00,0x00,0x28,0x68,0xA8,0x28,0x28,0x28,0x27,0x00,
+ 0x00,0x00,0x02,0x02,0x02,0x03,0x02,0x02,0x02,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0x22,0xB6,0xAA,0xA2,0xA2,0xA2,0x22,0x00,
+ 0x00,0x00,0x27,0x68,0xA8,0x28,0x28,0x28,0x27,0x00,
+ 0x00,0x00,0x02,0x02,0x02,0x03,0x02,0x02,0x02,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0xBE,0x88,0x88,0x88,0x88,0x88,0x08,0x00,
+ 0x00,0x00,0xE8,0x28,0x28,0xE8,0x28,0x28,0xE7,0x00,
+ 0x00,0x00,0x03,0x00,0x00,0x01,0x00,0x00,0x03,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0xA2,0xA2,0xAA,0xAA,0xAA,0xAA,0x94,0x00,
+ 0x00,0x00,0xEF,0x20,0x20,0x27,0x20,0x20,0xEF,0x00,
+ 0x00,0x00,0x01,0x02,0x02,0x02,0x02,0x02,0x01,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0xBE,0x88,0x88,0x88,0x88,0x88,0x88,0x00,
+ 0x00,0x00,0x28,0x28,0x28,0x2F,0x28,0x28,0xC8,0x00,
+ 0x00,0x00,0x7A,0x8A,0x8A,0x7A,0x4A,0x8A,0x89,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0xBE,0x82,0x82,0x9E,0x82,0x82,0x82,0x00,
+ 0x00,0x00,0xC7,0x88,0x88,0x87,0x84,0x88,0xC8,0x00,
+ 0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0x1C,0xA2,0x82,0x9C,0xA0,0xA2,0x9C,0x00,
+ 0x00,0x00,0xE7,0x88,0x88,0x88,0x8F,0x88,0x88,0x00,
+ 0x00,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+ };
+ */
 
-static void DontChangeButtonConfiguration(void)
-{
-  /* assign LED button to all modes */
-  unsigned char i;
-  for ( i = 0; i < NUMBER_OF_BUTTON_MODES; i++ )
-  {
-    /* turn off led 3 seconds after button has been released */
-    EnableButtonAction(i,
-                       SW_D_INDEX,
-                       BUTTON_STATE_PRESSED,
-                       LedChange,
-                       LED_START_OFF_TIMER);
+static void DontChangeButtonConfiguration(void) {
+	/* assign LED button to all modes */
+	unsigned char i;
+	for (i = 0; i < NUMBER_OF_BUTTON_MODES; i++) {
+		/* turn off led 3 seconds after button has been released */
+		EnableButtonAction(i, SW_D_INDEX, BUTTON_STATE_PRESSED, LedChange,
+				LED_START_OFF_TIMER);
 
-    /* turn on led immediately when button is pressed */
-    EnableButtonAction(i,
-                       SW_D_INDEX,
-                       BUTTON_STATE_IMMEDIATE,
-                       LedChange,
-                       LED_ON_OPTION);
+		/* turn on led immediately when button is pressed */
+		EnableButtonAction(i, SW_D_INDEX, BUTTON_STATE_IMMEDIATE, LedChange,
+				LED_ON_OPTION);
 
-    /* software reset is available in all modes */
-    EnableButtonAction(i,
-                       SW_F_INDEX,
-                       BUTTON_STATE_LONG_HOLD,
-                       SoftwareResetMsg,
-                       MASTER_RESET_OPTION);
+		/* software reset is available in all modes */
+		EnableButtonAction(i, SW_F_INDEX, BUTTON_STATE_LONG_HOLD,
+				SoftwareResetMsg, MASTER_RESET_OPTION);
 
-  }
+	}
 
 }
 
-static void SetupNormalIdleScreenButtons(void)
-{
-  EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE,
-                     SW_F_INDEX,
-                     BUTTON_STATE_IMMEDIATE,
-                     WatchStatusMsg,
-                     RESET_DISPLAY_TIMER);
+static void SetupNormalIdleScreenButtons(void) {
+	EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE, SW_F_INDEX,
+			BUTTON_STATE_IMMEDIATE, WatchStatusMsg, RESET_DISPLAY_TIMER);
 
-  EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE,
-                     SW_E_INDEX,
-                     BUTTON_STATE_IMMEDIATE,
-                     ListPairedDevicesMsg,
-                     NO_MSG_OPTIONS);
+	EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE, SW_E_INDEX,
+			BUTTON_STATE_IMMEDIATE, ListPairedDevicesMsg, NO_MSG_OPTIONS);
 
-  /* led is already assigned */
+	/* led is already assigned */
 
-  EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE,
-                     SW_C_INDEX,
-                     BUTTON_STATE_IMMEDIATE,
-                     MenuModeMsg,
-                     MENU_MODE_OPTION_PAGE1);
+	EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE, SW_C_INDEX,
+			BUTTON_STATE_IMMEDIATE, MenuModeMsg, MENU_MODE_OPTION_PAGE1);
 
-  EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE,
-                     SW_B_INDEX,
-                     BUTTON_STATE_IMMEDIATE,
-                     ToggleSecondsMsg,
-                     TOGGLE_SECONDS_OPTIONS_UPDATE_IDLE);
+	EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE, SW_B_INDEX,
+			BUTTON_STATE_IMMEDIATE, ToggleSecondsMsg,
+			TOGGLE_SECONDS_OPTIONS_UPDATE_IDLE);
 
-  EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE,
-                     SW_A_INDEX,
-                     BUTTON_STATE_IMMEDIATE,
-                     CountDown,
-                     RESET_DISPLAY_TIMER);
+	EnableButtonAction(NORMAL_IDLE_SCREEN_BUTTON_MODE, SW_A_INDEX,
+			BUTTON_STATE_IMMEDIATE, CountDown, RESET_DISPLAY_TIMER);
 }
 
-static void ConfigureIdleUserInterfaceButtons(void)
-{
-  if ( CurrentIdlePage != LastIdlePage )
-  {
-    LastIdlePage = CurrentIdlePage;
+static void ConfigureIdleUserInterfaceButtons(void) {
+	if (CurrentIdlePage != LastIdlePage) {
+		LastIdlePage = CurrentIdlePage;
 
-    /* only allow reset on one of the pages */
-    DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                        SW_F_INDEX,
-                        BUTTON_STATE_PRESSED);
+		/* only allow reset on one of the pages */
+		DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+				BUTTON_STATE_PRESSED);
 
-    switch ( CurrentIdlePage )
-    {
-    case NormalPage:
-      /* do nothing */
-      break;
+		switch (CurrentIdlePage) {
+		case NormalPage:
+			/* do nothing */
+			break;
 
-    case RadioOnWithPairingInfoPage:
+		case RadioOnWithPairingInfoPage:
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         WatchStatusMsg,
-                         RESET_DISPLAY_TIMER);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, WatchStatusMsg,
+					RESET_DISPLAY_TIMER);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ListPairedDevicesMsg,
-                         NO_MSG_OPTIONS);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, ListPairedDevicesMsg,
+					NO_MSG_OPTIONS);
 
-      /* led is already assigned */
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE1);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE1);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_B_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ToggleSecondsMsg,
-                         TOGGLE_SECONDS_OPTIONS_UPDATE_IDLE);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE, ToggleSecondsMsg,
+					TOGGLE_SECONDS_OPTIONS_UPDATE_IDLE);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         CountDown,
-                         RESET_DISPLAY_TIMER);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, CountDown, RESET_DISPLAY_TIMER);
 
-      break;
+			break;
 
-    case BluetoothOffPage:
-    case RadioOnWithoutPairingInfoPage:
+		case BluetoothOffPage:
+		case RadioOnWithoutPairingInfoPage:
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ModifyTimeMsg,
-                         MODIFY_TIME_INCREMENT_HOUR);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, ModifyTimeMsg,
+					MODIFY_TIME_INCREMENT_HOUR);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ListPairedDevicesMsg,
-                         NO_MSG_OPTIONS);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, ListPairedDevicesMsg,
+					NO_MSG_OPTIONS);
 
-      /* led is already assigned */
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE1);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE1);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_B_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ModifyTimeMsg,
-                         MODIFY_TIME_INCREMENT_DOW);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE, ModifyTimeMsg,
+					MODIFY_TIME_INCREMENT_DOW);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ModifyTimeMsg,
-                         MODIFY_TIME_INCREMENT_MINUTE);
-      break;
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, ModifyTimeMsg,
+					MODIFY_TIME_INCREMENT_MINUTE);
+			break;
 
+		case Menu1Page:
 
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_TOGGLE_DISCOVERABILITY);
 
-    case Menu1Page:
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_TOGGLE_LINK_ALARM);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_TOGGLE_DISCOVERABILITY);
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_TOGGLE_LINK_ALARM);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_EXIT);
 
-      /* led is already assigned */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE2);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_EXIT);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_TOGGLE_BLUETOOTH);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_B_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE2);
+			break;
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_TOGGLE_BLUETOOTH);
+		case Menu2Page:
 
-      break;
+			/* this cannot be immediate because Master Reset is on this button also */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_PRESSED, SoftwareResetMsg, NO_MSG_OPTIONS);
 
-    case Menu2Page:
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_TOGGLE_SECURE_SIMPLE_PAIRING);
 
-      /* this cannot be immediate because Master Reset is on this button also */
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_PRESSED,
-                         SoftwareResetMsg,
-                         NO_MSG_OPTIONS);
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_TOGGLE_SECURE_SIMPLE_PAIRING);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_EXIT);
 
-      /* led is already assigned */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE3);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_EXIT);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_TOGGLE_RST_NMI_PIN);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_B_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE3);
+			break;
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_TOGGLE_RST_NMI_PIN);
+		case Menu3Page:
 
-      break;
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_INVERT_DISPLAY);
 
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_DISPLAY_SECONDS);
 
-    case Menu3Page:
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_INVERT_DISPLAY);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuButtonMsg,
+					MENU_BUTTON_OPTION_EXIT);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_DISPLAY_SECONDS);
-
-      /* led is already assigned */
-
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuButtonMsg,
-                         MENU_BUTTON_OPTION_EXIT);
-
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_B_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE1);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE1);
 
 #if 0
-      /* shipping mode is disabled for now */
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         EnterShippingModeMsg,
-                         NO_MSG_OPTIONS);
+			/* shipping mode is disabled for now */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
+					SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE,
+					EnterShippingModeMsg,
+					NO_MSG_OPTIONS);
 #else
-      DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                          SW_A_INDEX,
-                          BUTTON_STATE_IMMEDIATE);
+			DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE);
 #endif
-      break;
+			break;
 
-    case ListPairedDevicesPage:
+		case ListPairedDevicesPage:
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         WatchStatusMsg,
-                         RESET_DISPLAY_TIMER);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, WatchStatusMsg,
+					RESET_DISPLAY_TIMER);
 
-      /* map this mode's entry button to go back to the idle mode */
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         IdleUpdate,
-                         NO_MSG_OPTIONS);
+			/* map this mode's entry button to go back to the idle mode */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, IdleUpdate, NO_MSG_OPTIONS);
 
-      /* led is already assigned */
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE1);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE1);
 
-      DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                          SW_B_INDEX,
-                          BUTTON_STATE_IMMEDIATE);
+			DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE);
 
-      /* map this mode's entry button to go back to the idle mode */
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         CountDown,
-                         RESET_DISPLAY_TIMER);
-      break;
+			/* map this mode's entry button to go back to the idle mode */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, CountDown, RESET_DISPLAY_TIMER);
+			break;
 
-    case WatchStatusPage:
+		case WatchStatusPage:
 
-      /* map this mode's entry button to go back to the idle mode */
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         IdleUpdate,
-                         RESET_DISPLAY_TIMER);
+			/* map this mode's entry button to go back to the idle mode */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, IdleUpdate, RESET_DISPLAY_TIMER);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         ListPairedDevicesMsg,
-                         NO_MSG_OPTIONS);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, ListPairedDevicesMsg,
+					NO_MSG_OPTIONS);
 
-      /* led is already assigned */
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         MenuModeMsg,
-                         MENU_MODE_OPTION_PAGE1);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, MenuModeMsg,
+					MENU_MODE_OPTION_PAGE1);
 
-      DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                          SW_B_INDEX,
-                          BUTTON_STATE_IMMEDIATE);
+			DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         CountDown,
-                         RESET_DISPLAY_TIMER);
-      break;
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, CountDown, RESET_DISPLAY_TIMER);
+			break;
 
-    case CountDownPage:
+		case CountDownPage:
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_F_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         CountDown,
-                         COUNTDOWN_UP);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_F_INDEX,
+					BUTTON_STATE_IMMEDIATE, CountDown, COUNTDOWN_UP);
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_E_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         CountDown,
-                         COUNTDOWN_DOWN);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_E_INDEX,
+					BUTTON_STATE_IMMEDIATE, CountDown, COUNTDOWN_DOWN);
 
-      /* led is already assigned */
+			/* led is already assigned */
 
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_C_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         CountDown,
-                         COUNTDOWN_START);
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_C_INDEX,
+					BUTTON_STATE_IMMEDIATE, CountDown, COUNTDOWN_START);
 
-      DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                          SW_B_INDEX,
-                          BUTTON_STATE_IMMEDIATE);
+			DisableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_B_INDEX,
+					BUTTON_STATE_IMMEDIATE);
 
-      /* map this mode's entry button to go back to the idle mode */
-      EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE,
-                         SW_A_INDEX,
-                         BUTTON_STATE_IMMEDIATE,
-                         IdleUpdate,
-                         RESET_DISPLAY_TIMER);
+			/* map this mode's entry button to go back to the idle mode */
+			EnableButtonAction(WATCH_DRAWN_SCREEN_BUTTON_MODE, SW_A_INDEX,
+					BUTTON_STATE_IMMEDIATE, IdleUpdate, RESET_DISPLAY_TIMER);
 
-      break;
+			break;
 
-
-    }
-  }
+		}
+	}
 }
 
 /* the default is for all simple button presses to be sent to the phone */
-static void DefaultApplicationAndNotificationButtonConfiguration(void)
-{
-  unsigned char index = 0;
+static void DefaultApplicationAndNotificationButtonConfiguration(void) {
+	unsigned char index = 0;
 
-  /*
-   * this will configure the pull switch even though it does not exist
-   * on the watch
-   */
-  for(index = 0; index < NUMBER_OF_BUTTONS; index++)
-  {
-    if ( index == SW_UNUSED_INDEX )
-    {
-      index++;
-    }
+	/*
+	 * this will configure the pull switch even though it does not exist
+	 * on the watch
+	 */
+	for (index = 0; index < NUMBER_OF_BUTTONS; index++) {
+		if (index == SW_UNUSED_INDEX) {
+			index++;
+		}
 
-    EnableButtonAction(APPLICATION_SCREEN_BUTTON_MODE,
-                       index,
-                       BUTTON_STATE_PRESSED,
-                       ButtonEventMsg,
-                       NO_MSG_OPTIONS);
+		EnableButtonAction(APPLICATION_SCREEN_BUTTON_MODE, index,
+				BUTTON_STATE_PRESSED, ButtonEventMsg, NO_MSG_OPTIONS);
 
-    EnableButtonAction(NOTIFICATION_BUTTON_MODE,
-                       index,
-                       BUTTON_STATE_PRESSED,
-                       ButtonEventMsg,
-                       NO_MSG_OPTIONS);
+		EnableButtonAction(NOTIFICATION_BUTTON_MODE, index,
+				BUTTON_STATE_PRESSED, ButtonEventMsg, NO_MSG_OPTIONS);
 
-    EnableButtonAction(SCROLL_BUTTON_MODE,
-                       index,
-                       BUTTON_STATE_PRESSED,
-                       ButtonEventMsg,
-                       NO_MSG_OPTIONS);
+		EnableButtonAction(SCROLL_BUTTON_MODE, index, BUTTON_STATE_PRESSED,
+				ButtonEventMsg, NO_MSG_OPTIONS);
 
-  }
+	}
 
 }
-
 
 /******************************************************************************/
 
-void InitializeIdleBufferConfig(void)
-{
-  nvIdleBufferConfig = WATCH_CONTROLS_TOP;
-  OsalNvItemInit(NVID_IDLE_BUFFER_CONFIGURATION,
-                 sizeof(nvIdleBufferConfig),
-                 &nvIdleBufferConfig);
+void InitializeIdleBufferConfig(void) {
+	nvIdleBufferConfig = WATCH_CONTROLS_TOP;
+	OsalNvItemInit(NVID_IDLE_BUFFER_CONFIGURATION, sizeof(nvIdleBufferConfig),
+			&nvIdleBufferConfig);
 }
 
-void InitializeIdleBufferInvert(void)
-{
-  nvIdleBufferInvert = 0;
-  OsalNvItemInit(NVID_IDLE_BUFFER_INVERT,
-                 sizeof(nvIdleBufferInvert),
-                 &nvIdleBufferInvert);
+void InitializeIdleBufferInvert(void) {
+	nvIdleBufferInvert = 0;
+	OsalNvItemInit(NVID_IDLE_BUFFER_INVERT, sizeof(nvIdleBufferInvert),
+			&nvIdleBufferInvert);
 }
 
-void InitializeDisplaySeconds(void)
-{
-  nvDisplaySeconds = 0;
-  OsalNvItemInit(NVID_DISPLAY_SECONDS,
-                 sizeof(nvDisplaySeconds),
-                 &nvDisplaySeconds);
+void InitializeDisplaySeconds(void) {
+	nvDisplaySeconds = 0;
+	OsalNvItemInit(NVID_DISPLAY_SECONDS, sizeof(nvDisplaySeconds),
+			&nvDisplaySeconds);
 }
 
 #if 0
 static void SaveIdleBufferConfig(void)
 {
-  osal_nv_write(NVID_IDLE_BUFFER_CONFIGURATION,
-                NV_ZERO_OFFSET,
-                sizeof(nvIdleBufferConfig),
-                &nvIdleBufferConfig);
+	osal_nv_write(NVID_IDLE_BUFFER_CONFIGURATION,
+			NV_ZERO_OFFSET,
+			sizeof(nvIdleBufferConfig),
+			&nvIdleBufferConfig);
 }
 #endif
 
-static void SaveIdleBufferInvert(void)
-{
-  OsalNvWrite(NVID_IDLE_BUFFER_INVERT,
-              NV_ZERO_OFFSET,
-              sizeof(nvIdleBufferInvert),
-              &nvIdleBufferInvert);
+static void SaveIdleBufferInvert(void) {
+	OsalNvWrite(NVID_IDLE_BUFFER_INVERT, NV_ZERO_OFFSET,
+			sizeof(nvIdleBufferInvert), &nvIdleBufferInvert);
 }
 
-static void SaveDisplaySeconds(void)
-{
-  OsalNvWrite(NVID_DISPLAY_SECONDS,
-              NV_ZERO_OFFSET,
-              sizeof(nvDisplaySeconds),
-              &nvDisplaySeconds);
+static void SaveDisplaySeconds(void) {
+	OsalNvWrite(NVID_DISPLAY_SECONDS, NV_ZERO_OFFSET, sizeof(nvDisplaySeconds),
+			&nvDisplaySeconds);
 }
 
-unsigned char QueryDisplaySeconds(void)
-{
-  return nvDisplaySeconds;
+unsigned char QueryDisplaySeconds(void) {
+	return nvDisplaySeconds;
 }
 
-unsigned char QueryInvertDisplay(void)
-{
-  return nvIdleBufferInvert;
+unsigned char QueryInvertDisplay(void) {
+	return nvIdleBufferInvert;
 }
 
 /******************************************************************************/
@@ -2534,103 +2197,89 @@ static unsigned char CharacterWidth;
 static unsigned int bitmap[MAX_FONT_ROWS];
 
 /* fonts can be up to 16 bits wide */
-static void WriteFontCharacter(unsigned char Character)
-{
-  CharacterMask = BIT0;
-  CharacterRows = GetCharacterHeight();
-  CharacterWidth = GetCharacterWidth(Character);
-  GetCharacterBitmap(Character,(unsigned int*)&bitmap);
+static void WriteFontCharacter(unsigned char Character) {
+	CharacterMask = BIT0;
+	CharacterRows = GetCharacterHeight();
+	CharacterWidth = GetCharacterWidth(Character);
+	GetCharacterBitmap(Character, (unsigned int*) &bitmap);
 
-  if ( gRow + CharacterRows > NUM_LCD_ROWS )
-  {
-    PrintString("Not enough rows to display character\r\n");
-    return;
-  }
+	if (gRow + CharacterRows > NUM_LCD_ROWS) {
+		PrintString("Not enough rows to display character\r\n");
+		return;
+	}
 
-  /* do things bit by bit */
-  unsigned char i;
-  unsigned char row;
+	/* do things bit by bit */
+	unsigned char i;
+	unsigned char row;
 
-  for (i = 0 ; i < CharacterWidth && gColumn < NUM_LCD_COL_BYTES; i++ )
-  {
-  	for(row = 0; row < CharacterRows; row++)
-    {
-      if ( (CharacterMask & bitmap[row]) != 0 )
-      {
-        pMyBuffer[gRow+row].Data[gColumn] |= gBitColumnMask;
-      }
-    }
+	for (i = 0; i < CharacterWidth && gColumn < NUM_LCD_COL_BYTES; i++) {
+		for (row = 0; row < CharacterRows; row++) {
+			if ((CharacterMask & bitmap[row]) != 0) {
+				pMyBuffer[gRow + row].Data[gColumn] |= gBitColumnMask;
+			}
+		}
 
-    /* the shift direction seems backwards... */
-    CharacterMask = CharacterMask << 1;
-    gBitColumnMask = gBitColumnMask << 1;
-    if ( gBitColumnMask == 0 )
-    {
-      gBitColumnMask = BIT0;
-      gColumn++;
-    }
+		/* the shift direction seems backwards... */
+		CharacterMask = CharacterMask << 1;
+		gBitColumnMask = gBitColumnMask << 1;
+		if (gBitColumnMask == 0) {
+			gBitColumnMask = BIT0;
+			gColumn++;
+		}
 
-  }
+	}
 
-  /* add spacing between characters */
-  unsigned char FontSpacing = GetFontSpacing();
-  for(i = 0; i < FontSpacing; i++)
-  {
-    gBitColumnMask = gBitColumnMask << 1;
-    if ( gBitColumnMask == 0 )
-    {
-      gBitColumnMask = BIT0;
-      gColumn++;
-    }
-  }
+	/* add spacing between characters */
+	unsigned char FontSpacing = GetFontSpacing();
+	for (i = 0; i < FontSpacing; i++) {
+		gBitColumnMask = gBitColumnMask << 1;
+		if (gBitColumnMask == 0) {
+			gBitColumnMask = BIT0;
+			gColumn++;
+		}
+	}
 
 }
 
-void WriteFontString(tString *pString)
-{
-  unsigned char i = 0;
+void WriteFontString(tString *pString) {
+	unsigned char i = 0;
 
-  while (pString[i] != 0 && gColumn < NUM_LCD_COL_BYTES)
-  {
-    WriteFontCharacter(pString[i++]);
-  }
+	while (pString[i] != 0 && gColumn < NUM_LCD_COL_BYTES) {
+		WriteFontCharacter(pString[i++]);
+	}
 
 }
 
 /******************************************************************************/
 
-unsigned char QueryIdlePageNormal(void)
-{
-  return (CurrentIdlePage == NormalPage);
+unsigned char QueryIdlePageNormal(void) {
+	return (CurrentIdlePage == NormalPage);
 }
 
-unsigned char LcdRtcUpdateHandlerIsr(void)
-{
-  unsigned char ExitLpm = 0;
-  unsigned int RtcSeconds = RTCSEC;
+unsigned char LcdRtcUpdateHandlerIsr(void) {
+	unsigned char ExitLpm = 0;
+	unsigned int RtcSeconds = RTCSEC;
 
-  if ( RtcUpdateEnable )
-  {
-    /* send a message every second or once a minute */
-    if (QueryDisplaySeconds() || lastMin != RTCMIN)
-    {
-      lastMin = RTCMIN;
-      tMessage Msg;
-      SetupMessage(&Msg, IdleUpdate, NO_MSG_OPTIONS);
-      SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
-      ExitLpm = 1;
-    }
-  }
-
-  if(CurrentIdlePage == CountDownPage){
-    if( running ){
-      tMessage Msg;
-      SetupMessage(&Msg, CountDown, COUNTDOWN_TICK);
-	  SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
-	  ExitLpm = 1;
-
+	if (RtcUpdateEnable) {
+		/* send a message every second or once a minute */
+		if (QueryDisplaySeconds() || lastMin != RTCMIN) {
+			lastMin = RTCMIN;
+			tMessage Msg;
+			SetupMessage(&Msg, IdleUpdate, NO_MSG_OPTIONS);
+			SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
+			ExitLpm = 1;
+		}
 	}
-  }
 
-  return ExitLpm;
+	if (CurrentIdlePage == CountDownPage) {
+		if (running) {
+			tMessage Msg;
+			SetupMessage(&Msg, CountDown, COUNTDOWN_TICK);
+			SendMessageToQueueFromIsr(DISPLAY_QINDEX, &Msg);
+			ExitLpm = 1;
+
+		}
+	}
+
+	return ExitLpm;
 }
