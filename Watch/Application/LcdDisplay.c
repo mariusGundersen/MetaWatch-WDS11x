@@ -82,7 +82,7 @@ static void ToggleSecondsHandler(unsigned char MsgOptions);
 static void ConnectionStateChangeHandler(void);
 
 /******************************************************************************/
-static void DrawFullTime(int Hour, int Minute, int Second, unsigned int y);
+static void DrawCenteredMinSec(int Hour, int Minute, int Second, unsigned int y);
 static void DrawDateTime(unsigned char OnceConnected);
 static void DrawConnectionScreen(void);
 static void InitMyBuffer(void);
@@ -870,6 +870,10 @@ static void BarCodeHandler(tMessage* pMsg)
 
   FillMyBuffer(STARTING_ROW,NUM_LCD_ROWS,0x00);
 
+  int clockHour=RTCHOUR,
+       clockMin=RTCMIN,
+       clockSec=RTCSEC;
+
   if(!running){
 	  switch (pMsg->Options) {
 	    case COUNTDOWN_START:
@@ -882,32 +886,31 @@ static void BarCodeHandler(tMessage* pMsg)
 		  diff++;
 		  break;
 	  }
-	  toMin = RTCMIN + diff;
-	  toHour = RTCHOUR + toMin / 60;
+	  toMin = clockMin + diff;
+	  toHour = clockHour + toMin / 60;
 	  toMin = toMin % 60;
-	  toSec = RTCSEC;
+	  toSec = clockSec;
   }else{
 	switch (pMsg->Options) {
 	  case COUNTDOWN_START:
 		running = 0;
-		toMin = RTCMIN + diff;
-		toHour = RTCHOUR + toMin / 60;
+		toMin = clockMin + diff;
+		toHour = clockHour + toMin / 60;
 		toMin = toMin % 60;
-		toSec = RTCSEC;
+		toSec = clockSec;
 		break;
 	  case COUNTDOWN_DOWN:
-		toSec = RTCSEC;
+		toSec = clockSec;
 		toMin--;
 		break;
 	  case COUNTDOWN_UP:
-		toSec = RTCSEC;
+		toSec = clockSec;
 		break;
 	}
   }
-  int secs, mins, hour;
-  secs = toSec - RTCSEC;
-  mins = toMin - RTCMIN;
-  hour = toHour - RTCHOUR;
+  int secs, mins;
+  secs = toSec - clockSec;
+  mins = toMin - clockMin;
   if(secs < 0){
 	  mins--;
 	  secs = 60 + secs;
@@ -916,11 +919,11 @@ static void BarCodeHandler(tMessage* pMsg)
 	  hour--;
 	  mins = 60 + mins;
   }
-  if(hour == 0 && mins == 0 && secs == 0){
+  if(mins == 0 && secs == 0){
 	  running = 0;
   }
 
-  DrawFullTime(hour, mins, secs, 32);
+  DrawCenteredMinSec(mins, secs, 32);
   //CopyRowsIntoMyBuffer(pBarCodeImage,STARTING_ROW,NUM_LCD_ROWS);
 
   /* display entire buffer */
@@ -1212,36 +1215,17 @@ static void CopyColumnsIntoMyBuffer(unsigned char const* pImage,
 
 }
 
-static void DrawFullTime(int Hour, int Minutes, int Seconds, unsigned int y)
+static void DrawCenteredMinSec(int Minutes, int Seconds, unsigned int y)
 {
   unsigned char msd;
   unsigned char lsd;
 
-  /* display hour */
-  //int Hour = RTCHOUR;
-
-
-  msd = Hour / 10;
-  lsd = Hour % 10;
 
   gRow = 6 + y;
-  gColumn = 0;
-  gBitColumnMask = BIT4;
+  gColumn = 24/8;
+  gBitColumnMask = BIT0;
   SetFont(MetaWatchTime);
 
-  /* if first digit is zero then leave location blank */
-  if ( msd == 0 && GetTimeFormat() == TWELVE_HOUR )
-  {
-    WriteFontCharacter(TIME_CHARACTER_SPACE_INDEX);
-  }
-  else
-  {
-    WriteFontCharacter(msd);
-  }
-
-  WriteFontCharacter(lsd);
-
-  WriteFontCharacter(TIME_CHARACTER_COLON_INDEX);
 
   /* display minutes */
   //int Minutes = RTCMIN;
